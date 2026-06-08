@@ -42,7 +42,14 @@ globals:
     type: std::string
     initial_value: '"Idle"'
     restore_value: no
+  # A:2 does not store manual Run speed. This is updated only from A:1.R live state
+  # or from the user's requested fan speed before sending A:18.
   - id: quietcool_selected_range
+    type: std::string
+    initial_value: '"LOW"'
+    restore_value: no
+  # A:2.L is timer speed only.
+  - id: quietcool_timer_range
     type: std::string
     initial_value: '"LOW"'
     restore_value: no
@@ -56,6 +63,31 @@ script:
           id: send_ble_msg
           msg: !lambda return "{\"A\":9,\"M\":\"" + mode + "\"}";
       - script.wait: send_ble_msg
+      - delay: 2s
+      - script.execute:
+          id: send_ble_msg
+          # Poll live state after mode writes so Home Assistant updates quickly.
+          msg: !lambda return "{\"A\":1}";
+      - script.wait: send_ble_msg
+      - script.execute:
+          id: send_ble_msg
+          # Poll parameters after mode writes to confirm persisted/configured state.
+          msg: !lambda return "{\"A\":2}";
+      - script.wait: send_ble_msg
+  - id: set_manual_range
+    parameters:
+      speed: string
+    then:
+      - script.execute:
+          id: send_ble_msg
+          msg: !lambda return "{\"A\":18,\"S\":\"" + speed + "\"}";
+      - script.wait: send_ble_msg
+      - delay: 1s
+      - script.execute:
+          id: send_ble_msg
+          # Poll live state after manual range writes so the fan entity reflects A:1.R.
+          msg: !lambda return "{\"A\":1}";
+      - script.wait: send_ble_msg
   - id: set_timer
     parameters:
       hours: int
@@ -66,24 +98,10 @@ script:
           id: send_ble_msg
           msg: !lambda return "{\"A\":7,\"H\":" + std::to_string(hours) + ",\"M\":" + std::to_string(minutes) + ",\"R\":\"" + speed + "\"}";
       - script.wait: send_ble_msg
-  - id: set_smart_thresholds_experimental
-    parameters:
-      high_temp: int
-      medium_temp: int
-      low_temp: int
-      humidity_shutoff: int
-      humidity_turn_on: int
-      humidity_speed: string
-    then:
-      # Experimental candidate only. A:3 has not been confirmed as the smart-threshold write API.
+      - delay: 1s
       - script.execute:
           id: send_ble_msg
-          msg: !lambda return "{\"A\":3,\"D\":" + std::to_string(high_temp) + ",\"E\":" + std::to_string(medium_temp) + ",\"F\":" + std::to_string(low_temp) + ",\"G\":" + std::to_string(humidity_shutoff) + ",\"H\":" + std::to_string(humidity_turn_on) + ",\"I\":\"" + humidity_speed + "\"}";
-      - script.wait: send_ble_msg
-      - delay: 3s
-      - script.execute:
-          id: send_ble_msg
-          # Confirm whether the experimental threshold write changed current parameters.
+          # Poll parameters after timer config writes so Timer Hours/Minutes/Speed readbacks update.
           msg: !lambda return "{\"A\":2}";
       - script.wait: send_ble_msg
   - id: start_quietcool_mode
@@ -92,16 +110,24 @@ script:
     then:
       - if:
           condition:
-            lambda: return mode == "Run" || mode == "Timer";
+            lambda: return mode == "Timer";
           then:
-            # A:7 is reused here because a speed-only write command is not yet known.
-            # Timer minutes/K behavior may still need reverse engineering.
+            # A:7 sets timer hours/minutes/speed. Manual Run speed is live/volatile and is not stored in A:2.
             - script.execute:
                 id: set_timer
                 hours: !lambda return (int) id(timer_hours).state;
                 minutes: !lambda return (int) id(timer_minutes).state;
-                speed: !lambda return id(quietcool_selected_range);
+                speed: !lambda return id(quietcool_timer_range);
             - script.wait: set_timer
+      - if:
+          condition:
+            lambda: return mode == "Run";
+          then:
+            # A:18 sets the live/manual range. It is separate from A:7 timer speed.
+            - script.execute:
+                id: set_manual_range
+                speed: !lambda return id(quietcool_selected_range);
+            - script.wait: set_manual_range
       - script.execute:
           id: set_mode
           mode: !lambda return mode;
@@ -123,7 +149,7 @@ script:
 # Fan Component Configuration
 # ----------------------------------------
 # Template-based fan platform that provides:
-# - Three speed levels (LOW/MEDIUM/HIGH)
+# - Three speed levels (LOW/MEDIUM/HIGH) using A:18 live/manual range writes
 # - Manual continuous Run mode operation
 # - State restoration after power loss
 fan:
@@ -135,7 +161,7 @@ fan:
     speed_count: 3
     restore_mode: RESTORE_DEFAULT_OFF
     on_speed_set:
-      - logger.log: "Setting run speed"
+      - logger.log: "Setting manual run speed"
       - lambda: |-
           if (x == 3) {
             id(quietcool_selected_range) = "HIGH";
@@ -220,6 +246,19 @@ select:
           id: start_quietcool_mode
           mode: !lambda return x;
       - script.wait: start_quietcool_mode
+  - platform: template
+    name: "QuietCool Timer Speed"
+    id: quietcool_timer_speed
+    options:
+      - "LOW"
+      - "MEDIUM"
+      - "HIGH"
+    lambda: |-
+      return id(quietcool_timer_range);
+    set_action:
+      - lambda: |-
+          id(quietcool_timer_range) = x;
+          id(quietcool_timer_speed).publish_state(x);
 
 # Device Configuration
 # ----------------------------------------
@@ -258,10 +297,38 @@ button:
     id: send_raw_quietcool_command_button
     on_press:
       then:
-        - script.execute:
-            id: send_ble_msg
-            msg: !lambda return id(raw_quietcool_command).state;
-        - script.wait: send_ble_msg
+        # Known unsafe: A:11 with numeric S, such as {"A":11,"S":1}, causes BLE disconnect/reconnect.
+        - if:
+            condition:
+              lambda: |-
+                std::string cmd = id(raw_quietcool_command).state;
+                std::string compact;
+                for (char c : cmd) {
+                  if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+                    compact += c;
+                  }
+                }
+                bool is_a11 = compact.find("\"A\":11") != std::string::npos;
+                bool has_numeric_s = compact.find("\"S\":0") != std::string::npos ||
+                                     compact.find("\"S\":1") != std::string::npos ||
+                                     compact.find("\"S\":2") != std::string::npos ||
+                                     compact.find("\"S\":3") != std::string::npos ||
+                                     compact.find("\"S\":4") != std::string::npos ||
+                                     compact.find("\"S\":5") != std::string::npos ||
+                                     compact.find("\"S\":6") != std::string::npos ||
+                                     compact.find("\"S\":7") != std::string::npos ||
+                                     compact.find("\"S\":8") != std::string::npos ||
+                                     compact.find("\"S\":9") != std::string::npos;
+                return !(is_a11 && has_numeric_s);
+            then:
+              - script.execute:
+                  id: send_ble_msg
+                  msg: !lambda return id(raw_quietcool_command).state;
+              - script.wait: send_ble_msg
+            else:
+              - logger.log:
+                  level: WARN
+                  format: "Blocked unsafe QuietCool raw command: A:11 with numeric S causes BLE disconnect/reconnect"
   - platform: template
     name: "Poll QuietCool Parameters Now"
     id: poll_quietcool_parameters_now_button
@@ -279,6 +346,33 @@ button:
         - script.execute:
             id: send_ble_msg
             msg: !lambda return "{\"A\":1}";
+        - script.wait: send_ble_msg
+  - platform: template
+    name: "Poll QuietCool Firmware Info Now"
+    id: poll_quietcool_firmware_info_now_button
+    on_press:
+      then:
+        - script.execute:
+            id: send_ble_msg
+            msg: !lambda return "{\"A\":3}";
+        - script.wait: send_ble_msg
+  - platform: template
+    name: "Poll QuietCool Fan Info Now"
+    id: poll_quietcool_fan_info_now_button
+    on_press:
+      then:
+        - script.execute:
+            id: send_ble_msg
+            msg: !lambda return "{\"A\":17}";
+        - script.wait: send_ble_msg
+  - platform: template
+    name: "Poll QuietCool Profiles Now"
+    id: poll_quietcool_profiles_now_button
+    on_press:
+      then:
+        - script.execute:
+            id: send_ble_msg
+            msg: !lambda return "{\"A\":19}";
         - script.wait: send_ble_msg
   - platform: template
     name: "Start QuietCool Timer"
@@ -364,17 +458,22 @@ sensor:
     name: "Humidity Turn On Threshold"
     id: get_hum_l
   - platform: template
-    name: "Timer Hours"
+    name: "Timer Hours Readback"
     id: get_hour
     unit_of_measurement: "h"
     device_class: duration
     accuracy_decimals: 0
     disabled_by_default: true
   - platform: template
-    name: "Timer Minutes"
+    name: "Timer Minutes Readback"
     id: get_minute
     unit_of_measurement: "m"
     device_class: duration
+    accuracy_decimals: 0
+    disabled_by_default: true
+  - platform: template
+    name: "Firmware Product Value"
+    id: firmware_product_value
     accuracy_decimals: 0
     disabled_by_default: true
 
@@ -387,7 +486,7 @@ text_sensor:
     name: mode
     id: mode
   - platform: template
-    name: range
+    name: "Live Speed"
     id: range
   - platform: template
     name: fan_type
@@ -420,6 +519,42 @@ text_sensor:
     name: "Timer Speed"
     id: get_time_range
     disabled_by_default: true
+  - platform: template
+    name: "Firmware Version"
+    id: firmware_version
+    disabled_by_default: true
+  - platform: template
+    name: "Firmware Date"
+    id: firmware_date
+    disabled_by_default: true
+  - platform: template
+    name: "Firmware Status"
+    id: firmware_status
+    disabled_by_default: true
+  - platform: template
+    name: "Firmware Hardware Status"
+    id: firmware_hardware_status
+    disabled_by_default: true
+  - platform: template
+    name: "Mode Write Success"
+    id: mode_write_success
+    disabled_by_default: true
+  - platform: template
+    name: "Manual Range Write Success"
+    id: manual_range_write_success
+    disabled_by_default: true
+  - platform: template
+    name: "Timer Write Success"
+    id: timer_write_success
+    disabled_by_default: true
+  - platform: template
+    name: "Profile Write Success"
+    id: profile_write_success
+    disabled_by_default: true
+  - platform: template
+    name: "QuietCool Profiles"
+    id: quietcool_profiles
+    disabled_by_default: true
   - platform: ble_client
     name: "BLE Data"
     id: quietcool_ble_data
@@ -434,6 +569,11 @@ text_sensor:
             if (!x.empty() && x.back() == '}') {
               id(quietcool_ble_data).publish_state(accumulated);
               ESP_LOGD("quietcool", "Received JSON data: %s", accumulated.c_str());
+              if (accumulated.rfind("QQ", 0) != 0) {
+                ESP_LOGW("quietcool", "Ignoring BLE notification without QQ prefix: %s", accumulated.c_str());
+                accumulated.clear();
+                return;
+              }
               bool parsed = false;
               // substr to remove "QQ" prefix from JSON response
               json::parse_json(accumulated.substr(2), [&parsed](JsonObject root) -> bool {
@@ -444,6 +584,21 @@ text_sensor:
                 if (!root["A"].isNull()) {
                   api = root["A"].as<int>();
                 }
+
+                bool live_fan_state_changed = false;
+                auto publish_fan_from_cached = [&]() {
+                  int fan_speed = 0;
+                  if (id(quietcool_selected_range) == "HIGH") {
+                    fan_speed = 3;
+                  } else if (id(quietcool_selected_range) == "MEDIUM") {
+                    fan_speed = 2;
+                  } else if (id(quietcool_selected_range) == "LOW") {
+                    fan_speed = 1;
+                  }
+                  id(quietcool_fan).state = (id(quietcool_mode_state) == "Run" && fan_speed > 0);
+                  id(quietcool_fan).speed = id(quietcool_fan).state ? fan_speed : 0;
+                  id(quietcool_fan).publish_state();
+                };
 
                 for (JsonObject::iterator it = root.begin(); it != root.end(); ++it) {
                   std::string key = it->key().c_str();
@@ -462,14 +617,18 @@ text_sensor:
                       id(mode).publish_state(v);
                       id(quietcool_mode_state) = v;
                       id(quietcool_mode).publish_state(v);
+                      live_fan_state_changed = true;
                       continue;
                     }
-                    if (key == "R") { // Range
+                    if (key == "R") { // Actual live speed/range
                       std::string v = it->value().as<std::string>();
                       id(range).publish_state(v);
                       if (v == "LOW" || v == "MEDIUM" || v == "HIGH") {
                         id(quietcool_selected_range) = v;
+                      } else {
+                        id(quietcool_selected_range) = "";
                       }
+                      live_fan_state_changed = true;
                       continue;
                     }
                     if (key == "S") { // Sensor state
@@ -538,7 +697,7 @@ text_sensor:
                       }
                       continue;
                     }
-                    if (key == "I") { // Humidity trigger speed/range
+                    if (key == "I") { // Humidity-trigger speed only; not live/manual Run speed
                       id(get_hum_range).publish_state(it->value().as<std::string>());
                       continue;
                     }
@@ -550,16 +709,102 @@ text_sensor:
                       id(get_minute).publish_state(it->value().as<float>());
                       continue;
                     }
-                    if (key == "L") { // Timer speed/range
+                    if (key == "L") { // Timer speed only; not live/manual Run speed
                       std::string v = it->value().as<std::string>();
                       id(get_time_range).publish_state(v);
                       if (v == "LOW" || v == "MEDIUM" || v == "HIGH") {
-                        id(quietcool_selected_range) = v;
+                        id(quietcool_timer_range) = v;
+                        id(quietcool_timer_speed).publish_state(v);
                       }
                       continue;
                     }
                     if (key == "M") { // Pairing mode / currently pairable state
                       id(pair_state).publish_state(it->value().as<std::string>());
+                      continue;
+                    }
+                  }
+
+                  // SetTimer acknowledgement. Persisted timer config should still be confirmed by polling A:2.
+                  if (api == 7) {
+                    if (key == "F") { // Success flag
+                      id(timer_write_success).publish_state(it->value().as<std::string>());
+                      continue;
+                    }
+                  }
+
+                  // GetFirmwareStatus / device status. A:3 is not the smart-threshold write API.
+                  if (api == 3) {
+                    if (key == "V") { // Firmware version
+                      id(firmware_version).publish_state(it->value().as<std::string>());
+                      continue;
+                    }
+                    if (key == "P") { // Unknown product/protocol/build value
+                      id(firmware_product_value).publish_state(it->value().as<float>());
+                      continue;
+                    }
+                    if (key == "D") { // Firmware date
+                      id(firmware_date).publish_state(it->value().as<std::string>());
+                      continue;
+                    }
+                    if (key == "M") { // Online/status value
+                      id(firmware_status).publish_state(it->value().as<std::string>());
+                      continue;
+                    }
+                    if (key == "H") { // Unknown hardware/status value
+                      id(firmware_hardware_status).publish_state(it->value().as<std::string>());
+                      continue;
+                    }
+                  }
+
+                  // SetMode acknowledgement. Persisted mode should still be confirmed by polling A:2.
+                  if (api == 9) {
+                    if (key == "W") { // Written/selected mode
+                      std::string v = it->value().as<std::string>();
+                      id(mode).publish_state(v);
+                      id(quietcool_mode_state) = v;
+                      id(quietcool_mode).publish_state(v);
+                      publish_fan_from_cached();
+                      continue;
+                    }
+                    if (key == "F") { // Success flag
+                      id(mode_write_success).publish_state(it->value().as<std::string>());
+                      continue;
+                    }
+                  }
+
+                  // SetManualRange acknowledgement. A:18.S is the acknowledged live/manual range.
+                  if (api == 18) {
+                    if (key == "S") { // Acknowledged live/manual range
+                      std::string v = it->value().as<std::string>();
+                      id(range).publish_state(v);
+                      if (v == "LOW" || v == "MEDIUM" || v == "HIGH") {
+                        id(quietcool_selected_range) = v;
+                      }
+                      publish_fan_from_cached();
+                      continue;
+                    }
+                    if (key == "F") { // Success flag
+                      id(manual_range_write_success).publish_state(it->value().as<std::string>());
+                      continue;
+                    }
+                  }
+
+                  // ReadProfiles. P is an array of profile rows:
+                  // [name, high_temp, medium_temp, low_temp, humidity_shutoff, humidity_turn_on, humidity_speed].
+                  if (api == 19) {
+                    if (key == "P") {
+                      std::string profiles;
+                      serializeJson(it->value(), profiles);
+                      id(quietcool_profiles).publish_state(profiles);
+                      continue;
+                    }
+                  }
+
+                  // Profile-ish acknowledgement. A:20 can return TRUE but has not been observed
+                  // to apply profiles into A:2, so this is debug-only.
+                  if (api == 20) {
+                    if (key == "F") { // Success flag
+                      id(profile_write_success).publish_state(it->value().as<std::string>());
                       continue;
                     }
                   }
@@ -586,6 +831,10 @@ text_sensor:
                   ESP_LOGD("quietcool", "No mapping for API %d key: %s", api, key.c_str());
                 }
 
+                if (api == 1 && live_fan_state_changed) {
+                  publish_fan_from_cached();
+                }
+
                 return true;
               });
               if (!parsed) {
@@ -599,7 +848,7 @@ text_sensor:
 # Polls less aggressively so the QuietCool mobile app has a better chance to connect.
 # Turn off the "QuietCool ESP BLE Connection" switch to fully release the BLE connection.
 interval:
-  - interval: 60s
+  - interval: 15s
     startup_delay: 20s
     then:
       - if:
@@ -608,25 +857,19 @@ interval:
           then:
             - script.execute:
                 id: send_ble_msg
-                # GetWorkState - current state, temp, humidity
                 msg: !lambda return "{\"A\":1}";
             - script.wait: send_ble_msg
-            - delay: 3s
+  - interval: 60s
+    startup_delay: 25s
+    then:
+      - if:
+          condition:
+            switch.is_on: quietcool_ble_connection
+          then:
             - script.execute:
                 id: send_ble_msg
-                # GetParameter - thresholds, fan type, timer settings
                 msg: !lambda return "{\"A\":2}";
             - script.wait: send_ble_msg
-            - delay: 3s
-            - script.execute:
-                id: send_ble_msg
-                # GetFanInfo - name/model/serial
-                msg: !lambda return "{\"A\":17}";
-            - script.wait: send_ble_msg
-          else:
-            - logger.log:
-                level: DEBUG
-                format: "QuietCool BLE connection switch is off; skipping poll"
 
 time:
   - platform: homeassistant
