@@ -69,7 +69,7 @@ globals:
 
 # Configure logging level
 logger:
-  level: INFO
+  level: DEBUG
 
 # Fan Control Scripts
 # ----------------------------------------
@@ -122,13 +122,16 @@ fan:
     id: quietcool_fan
     has_direction: false
     has_oscillating: false
-    speed_count: 2
+    speed_count: 3
     restore_mode: RESTORE_DEFAULT_OFF
     on_speed_set:
       - logger.log: "Setting speed"
       - script.execute:
           id: set_timer
-          speed: !lambda 'return x == 2 ? "HIGH" : "LOW";'
+          speed: !lambda |-
+            if (x == 3) return "HIGH";
+            if (x == 2) return "MEDIUM";
+            return "LOW";
           hours: 3
           minutes: 0
       - script.wait: set_timer
@@ -177,7 +180,10 @@ number:
           id: set_timer
           hours: !lambda return x;
           minutes: !lambda return id(timer_minutes).state;
-          speed: &set_timer_speed !lambda 'return id(quietcool_fan).speed == 2 ? "HIGH" : "LOW";'
+          speed: &set_timer_speed !lambda |-
+            if (id(quietcool_fan).speed == 3) return "HIGH";
+            if (id(quietcool_fan).speed == 2) return "MEDIUM";
+            return "LOW";
 
   - platform: template
     name: "Timer Minutes"
@@ -252,19 +258,19 @@ sensor:
     name: humidity_sample
     id: humidity_sample
   - <<: *temperature_sensor
-    name: get_temp_h
+    name: "High Temperature Threshold"
     id: get_temp_h
-    disabled_by_default: true
-  - <<: *humidity_sensor
-    name: get_hum_h
-    id: get_hum_h
-    disabled_by_default: true
   - <<: *temperature_sensor
-    name: get_temp_l
+    name: "Medium Temperature Threshold"
+    id: get_temp_m
+  - <<: *temperature_sensor
+    name: "Low Temperature Threshold"
     id: get_temp_l
-    disabled_by_default: true
   - <<: *humidity_sensor
-    name: get_hum_l
+    name: "Humidity Shutoff Threshold"
+    id: get_hum_h
+  - <<: *humidity_sensor
+    name: "Humidity Low/Unused"
     id: get_hum_l
     disabled_by_default: true
   - platform: template
@@ -314,7 +320,7 @@ text_sensor:
     id: sensor_state
     disabled_by_default: true
   - platform: template
-    name: pair_state
+    name: "Pairing Mode"
     id: pair_state
   - platform: template
     name: get_hum_range
@@ -394,30 +400,39 @@ text_sensor:
                       id(fan_type).publish_state(it->value().as<std::string>());
                       continue;
                     }
-                    if (key == "D") { // GetTemp_H
+                    if (key == "D") { // High temperature threshold (whole °F)
                       float v = it->value().as<float>();
                       if (v != 255.0f) {
-                        // 255.0f would mean it's initially 255, which is a special value indicating "not set"
-                        v = v / 10.0f;
+                        id(get_temp_h).publish_state(v);
                       }
-                      id(get_temp_h).publish_state(v);
                       continue;
                     }
-                    if (key == "F") { // GetTemp_L
+                    if (key == "E") { // Medium temperature threshold (whole °F)
                       float v = it->value().as<float>();
                       if (v != 255.0f) {
-                        // 255.0f would mean it's initially 255, which is a special value indicating "not set"
-                        v = v / 10.0f;
+                        id(get_temp_m).publish_state(v);
                       }
-                      id(get_temp_l).publish_state(v);
                       continue;
                     }
-                    if (key == "G") { // GetHum_H
-                      id(get_hum_h).publish_state(it->value().as<float>());
+                    if (key == "F") { // Low temperature threshold (whole °F)
+                      float v = it->value().as<float>();
+                      if (v != 255.0f) {
+                        id(get_temp_l).publish_state(v);
+                      }
                       continue;
                     }
-                    if (key == "H") { // GetHum_L
-                      id(get_hum_l).publish_state(it->value().as<float>());
+                    if (key == "G") { // Humidity shutoff threshold
+                      float v = it->value().as<float>();
+                      if (v != 255.0f) {
+                        id(get_hum_h).publish_state(v);
+                      }
+                      continue;
+                    }
+                    if (key == "H") { // Humidity low/unused on this model; 255 appears to mean "not set"
+                      float v = it->value().as<float>();
+                      if (v != 255.0f) {
+                        id(get_hum_l).publish_state(v);
+                      }
                       continue;
                     }
                     if (key == "I") { // GetHum_Range
