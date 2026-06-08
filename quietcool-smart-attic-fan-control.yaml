@@ -10,34 +10,6 @@ substitutions:
   characteristic_uuid: "0000ff01-0000-1000-8000-00805f9b34fb"
   mac_address: "00:00:00:00:00:00"
 
-# Basic ESPHome device configuration
-esphome:
-  name: quietcool-fan
-  friendly_name: QuietCool Fan
-  name_add_mac_suffix: true
-
-# Hardware configuration for ESP32 development board
-esp32:
-  board: esp32dev
-  framework:
-    type: arduino
-
-# Enable Home Assistant API integration
-api:
-
-# Enable Over-The-Air updates
-ota:
-  - platform: esphome
-
-# Enable captive portal for initial WiFi setup
-captive_portal:
-
-# WiFi configuration with fallback access point
-wifi:
-  ap:
-
-# BLE configuration for connecting to the QuietCool fan
-# Uses passive scanning to preserve battery life
 esp32_ble_tracker:
   scan_parameters:
     active: false
@@ -67,16 +39,6 @@ globals:
     initial_value: ""
     restore_value: no
 
-# Configure logging level
-logger:
-  level: DEBUG
-
-# Fan Control Scripts
-# ----------------------------------------
-# Scripts handle different aspects of fan control:
-# - set_mode: Changes fan operation mode (Timer/Idle)
-# - set_timer: Configures timer duration and speed
-# - send_ble_msg: Handles BLE message transmission
 script:
   - id: set_mode
     parameters:
@@ -113,7 +75,7 @@ script:
 # Fan Component Configuration
 # ----------------------------------------
 # Template-based fan platform that provides:
-# - Two speed levels (LOW/HIGH)
+# - Three speed levels (LOW/MEDIUM/HIGH)
 # - Timer-based operation
 # - State restoration after power loss
 fan:
@@ -228,6 +190,17 @@ button:
             msg: !lambda return "{\"A\":14,\"P\":\"" + id(pair_id).state + "\"}";
         - script.wait: send_ble_msg
 
+# BLE Connection Control
+# ----------------------------------------
+# Turn this off from Home Assistant when you want to use the QuietCool mobile app.
+# The interval poller below also checks this switch, so it will stop sending commands while disconnected.
+switch:
+  - platform: ble_client
+    ble_client_id: qc_ble
+    name: "QuietCool ESP BLE Connection"
+    id: quietcool_ble_connection
+    restore_mode: RESTORE_DEFAULT_ON
+
 # Sensor Templates and Configurations
 # ----------------------------------------
 # Define reusable sensor templates for temperature and humidity
@@ -270,7 +243,7 @@ sensor:
     name: "Humidity Shutoff Threshold"
     id: get_hum_h
   - <<: *humidity_sensor
-    name: "Humidity Low/Unused"
+    name: "Humidity Low Unused"
     id: get_hum_l
     disabled_by_default: true
   - platform: template
@@ -379,13 +352,16 @@ text_sensor:
                       id(sensor_state).publish_state(it->value().as<std::string>());
                       continue;
                     }
-                    if (key == "T") { // Temp sample (example shows 553 -> probably 55.3)
+                    if (key == "T") { // Temperature sample (tenths of °F, e.g. 871 -> 87.1°F)
                       float v = it->value().as<float>() / 10.0f;
                       id(temp_sample).publish_state(v);
+                      id(temperature).publish_state(v);
                       continue;
                     }
-                    if (key == "H") { // Humidity sample
-                      id(humidity_sample).publish_state(it->value().as<float>());
+                    if (key == "H") { // Humidity sample (%)
+                      float v = it->value().as<float>();
+                      id(humidity_sample).publish_state(v);
+                      id(humidity).publish_state(v);
                       continue;
                     }
                   }
@@ -489,31 +465,37 @@ text_sensor:
 
 # Periodic Updates
 # ----------------------------------------
-# Polls the fan every 15 seconds for:
-# - Current parameters
-# - Work state
-# - Fan information
-# This ensures the Home Assistant interface stays in sync with the actual fan state
+# Polls less aggressively so the QuietCool mobile app has a better chance to connect.
+# Turn off the "QuietCool ESP BLE Connection" switch to fully release the BLE connection.
 interval:
-  - interval: 15s
+  - interval: 60s
+    startup_delay: 20s
     then:
-      - script.execute:
-          id: send_ble_msg
-          # GetParameter
-          msg: !lambda return "{\"A\":2}";
-      - script.wait: send_ble_msg
-      - delay: 5s
-      - script.execute:
-          id: send_ble_msg
-          # GetWorkState
-          msg: !lambda return "{\"A\":1}";
-      - script.wait: send_ble_msg
-      - delay: 5s
-      - script.execute:
-          id: send_ble_msg
-          # GetFanInfo
-          msg: !lambda return "{\"A\":17}";
-      - script.wait: send_ble_msg
+      - if:
+          condition:
+            switch.is_on: quietcool_ble_connection
+          then:
+            - script.execute:
+                id: send_ble_msg
+                # GetWorkState - current state, temp, humidity
+                msg: !lambda return "{\"A\":1}";
+            - script.wait: send_ble_msg
+            - delay: 3s
+            - script.execute:
+                id: send_ble_msg
+                # GetParameter - thresholds, fan type, timer settings
+                msg: !lambda return "{\"A\":2}";
+            - script.wait: send_ble_msg
+            - delay: 3s
+            - script.execute:
+                id: send_ble_msg
+                # GetFanInfo - name/model/serial
+                msg: !lambda return "{\"A\":17}";
+            - script.wait: send_ble_msg
+          else:
+            - logger.log:
+                level: DEBUG
+                format: "QuietCool BLE connection switch is off; skipping poll"
 
 time:
   - platform: homeassistant
