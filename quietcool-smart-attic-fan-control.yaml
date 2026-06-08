@@ -375,6 +375,42 @@ button:
             msg: !lambda return "{\"A\":19}";
         - script.wait: send_ble_msg
   - platform: template
+    name: "QuietCool Run Low"
+    id: quietcool_run_low_button
+    on_press:
+      - script.execute:
+          id: set_manual_range
+          speed: "LOW"
+      - script.wait: set_manual_range
+      - script.execute:
+          id: set_mode
+          mode: "Run"
+      - script.wait: set_mode
+  - platform: template
+    name: "QuietCool Run Medium"
+    id: quietcool_run_medium_button
+    on_press:
+      - script.execute:
+          id: set_manual_range
+          speed: "MEDIUM"
+      - script.wait: set_manual_range
+      - script.execute:
+          id: set_mode
+          mode: "Run"
+      - script.wait: set_mode
+  - platform: template
+    name: "QuietCool Run High"
+    id: quietcool_run_high_button
+    on_press:
+      - script.execute:
+          id: set_manual_range
+          speed: "HIGH"
+      - script.wait: set_manual_range
+      - script.execute:
+          id: set_mode
+          mode: "Run"
+      - script.wait: set_mode
+  - platform: template
     name: "Start QuietCool Timer"
     id: start_quietcool_timer_button
     on_press:
