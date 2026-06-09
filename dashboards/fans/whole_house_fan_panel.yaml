@@ -1,11 +1,8 @@
 ############################################################
-# WHOLE-HOUSE FAN REMOTE
+# WHOLE-HOUSE FAN DECISION PANEL
 ############################################################
 type: vertical-stack
 cards:
-  ########################################################
-  # Status Hero
-  ########################################################
   - type: custom:button-card
     entity: fan.whole_house_fan_quietcool_fan
     name: Whole-House Fan
@@ -14,13 +11,8 @@ cards:
     show_label: true
     label: >
       [[[
-        const temp = parseFloat(states['sensor.whole_house_fan_temperature']?.state);
-        const hum = parseFloat(states['sensor.whole_house_fan_humidity']?.state);
-        const modeRaw = states['sensor.whole_house_fan_mode']?.state || '—';
-        const speedRaw = states['sensor.whole_house_fan_live_speed']?.state || '—';
-
-        const tempText = isNaN(temp) ? '—' : temp.toFixed(1) + '°F';
-        const humText = isNaN(hum) ? '—' : hum.toFixed(0) + '%';
+        const modeRaw = states['sensor.whole_house_fan_mode']?.state || '-';
+        const speedRaw = states['sensor.whole_house_fan_live_speed']?.state || '-';
 
         const mode =
           modeRaw === 'Idle' ? 'Off' :
@@ -36,7 +28,7 @@ cards:
           speedRaw === 'HIGH' ? 'High' :
           speedRaw;
 
-        return `${tempText} · ${humText} humidity · ${mode} · ${speed}`;
+        return `${mode} \u00b7 ${speed}`;
       ]]]
     tap_action:
       action: more-info
@@ -83,13 +75,112 @@ cards:
       }
 
   ########################################################
-  # Main Controls
+  # Conditions
   ########################################################
-  - type: custom:bubble-card
-    card_type: separator
-    icon: mdi:remote
-    name: Controls
-    modules: [default]
+  - type: custom:button-card
+    entity: sensor.bedrooms_temperature
+    triggers_update: all
+    name: Conditions
+    icon: mdi:home-thermometer-outline
+    show_state: false
+    show_label: true
+    custom_fields:
+      ac: >
+        [[[
+          const climates = Object.values(states).filter((entity) => entity.entity_id?.startsWith('climate.'));
+          const cooling = climates.some((entity) => entity.attributes?.hvac_action === 'cooling');
+          const idle = climates.some((entity) => ['heat', 'cool', 'auto', 'fan_only'].includes(entity.state));
+          return cooling ? 'AC: Cooling' : idle ? 'AC: Idle' : 'AC: Off';
+        ]]]
+    label: >
+      [[[
+        const house = parseFloat(states['sensor.bedrooms_temperature']?.state);
+        const weather = states['weather.forecast_home'];
+        const outside = parseFloat(weather?.attributes?.temperature);
+        const outdoorHumidity = parseFloat(weather?.attributes?.humidity);
+
+        const houseText = isNaN(house) ? '-' : `${house.toFixed(1)}\u00b0F`;
+        const outsideTempText = isNaN(outside) ? '-' : `${outside.toFixed(1)}\u00b0F`;
+        const outsideHumText = isNaN(outdoorHumidity) ? '-' : `${outdoorHumidity.toFixed(0)}%`;
+
+        const climates = Object.values(states).filter((entity) => entity.entity_id?.startsWith('climate.'));
+        const acCooling = climates.some((entity) => entity.attributes?.hvac_action === 'cooling');
+
+        let recommendation = 'Temperature data unavailable - compare conditions before starting.';
+        if (!isNaN(house) && !isNaN(outside) && !isNaN(outdoorHumidity)) {
+          if (acCooling) {
+            recommendation = 'AC is running - consider turning it off before starting the house fan.';
+          } else if (outside > house) {
+            recommendation = 'Outside is warmer than inside - leave fan off.';
+          } else if (outside < house && outdoorHumidity >= 65) {
+            recommendation = 'Outdoor air is cooler, but humidity is high.';
+          } else if (outside < house) {
+            recommendation = 'Good time to run - outside is cooler and AC is idle.';
+          } else {
+            recommendation = 'Indoor and outdoor temperatures are about the same - leave fan off.';
+          }
+        }
+
+        return `House: ${houseText}\nOutside: ${outsideTempText} \u00b7 ${outsideHumText} humidity\n${recommendation}`;
+      ]]]
+    tap_action:
+      action: more-info
+    styles:
+      card:
+        - padding: 18px
+        - border-radius: 20px
+        - background: rgba(0, 188, 212, 0.12)
+      grid:
+        - grid-template-areas: '"i n ac" "i l l"'
+        - grid-template-columns: 48px 1fr max-content
+        - grid-template-rows: min-content min-content
+        - column-gap: 10px
+      icon:
+        - width: 30px
+        - color: var(--primary-color)
+      name:
+        - justify-self: start
+        - align-self: center
+        - font-size: 19px
+        - font-weight: 800
+      label:
+        - justify-self: stretch
+        - text-align: left
+        - white-space: pre-line
+        - line-height: 1.35
+        - font-size: 14px
+        - opacity: 0.9
+        - margin-top: 8px
+      custom_fields:
+        ac:
+          - justify-self: end
+          - align-self: center
+          - border-radius: 999px
+          - padding: 5px 10px
+          - font-size: 12px
+          - font-weight: 800
+          - background: >
+              [[[
+                const climates = Object.values(states).filter((entity) => entity.entity_id?.startsWith('climate.'));
+                const cooling = climates.some((entity) => entity.attributes?.hvac_action === 'cooling');
+                const idle = climates.some((entity) => ['heat', 'cool', 'auto', 'fan_only'].includes(entity.state));
+                return cooling
+                  ? 'rgba(244, 67, 54, 0.18)'
+                  : idle
+                    ? 'rgba(255, 152, 0, 0.18)'
+                    : 'rgba(76, 175, 80, 0.18)';
+              ]]]
+          - color: >
+              [[[
+                const climates = Object.values(states).filter((entity) => entity.entity_id?.startsWith('climate.'));
+                const cooling = climates.some((entity) => entity.attributes?.hvac_action === 'cooling');
+                const idle = climates.some((entity) => ['heat', 'cool', 'auto', 'fan_only'].includes(entity.state));
+                return cooling
+                  ? 'var(--error-color)'
+                  : idle
+                    ? 'var(--warning-color)'
+                    : 'var(--success-color)';
+              ]]]
 
   - type: custom:button-card
     name: Open windows before starting the whole-house fan.
@@ -116,6 +207,9 @@ cards:
         - font-size: 14px
         - font-weight: 700
 
+  ########################################################
+  # Fan Controls
+  ########################################################
   - type: grid
     columns: 4
     square: false
@@ -272,21 +366,20 @@ cards:
   ########################################################
   # Timer
   ########################################################
-  - type: custom:bubble-card
-    card_type: separator
-    icon: mdi:timer-outline
-    name: Timer
-    modules: [default]
-
-  - type: custom:bubble-card
-    card_type: button
-    button_type: name
-    name: Start Timer
-    icon: mdi:timer-play-outline
-    button_action:
-      tap_action:
-        action: navigate
-        navigation_path: '#quietcool-whole-house-timer'
+  - type: conditional
+    conditions:
+      - entity: timer.quietcool_whole_house_fan_timer
+        state_not: active
+    card:
+      type: custom:bubble-card
+      card_type: button
+      button_type: name
+      name: Start Timer
+      icon: mdi:timer-play-outline
+      button_action:
+        tap_action:
+          action: navigate
+          navigation_path: '#quietcool-whole-house-timer'
 
   - type: conditional
     conditions:
@@ -297,12 +390,18 @@ cards:
       update_timer: 1000
       triggers_update:
         - timer.quietcool_whole_house_fan_timer
-      name: Timer Running
-      icon: mdi:timer-sand
-      show_state: false
-      show_label: true
-      label: >
+        - sensor.whole_house_fan_live_speed
+      name: >
         [[[
+          const speedRaw = states['sensor.whole_house_fan_live_speed']?.state || 'LOW';
+          const speed =
+            speedRaw === 'CLOSE' ? 'Off' :
+            speedRaw === 'LOW' ? 'Low' :
+            speedRaw === 'MED' ? 'Medium' :
+            speedRaw === 'MEDIUM' ? 'Medium' :
+            speedRaw === 'HIGH' ? 'High' :
+            speedRaw;
+
           const timer = states['timer.quietcool_whole_house_fan_timer'];
           const finishesAt = timer?.attributes?.finishes_at;
           let remaining = 'running';
@@ -319,32 +418,31 @@ cards:
               : `${m}:${String(s).padStart(2, '0')}`;
           }
 
-          return `${remaining} left · then Off`;
+          return `Running ${speed} \u00b7 returns to Off in ${remaining}`;
         ]]]
+      icon: mdi:timer-sand
+      show_state: false
       tap_action:
         action: more-info
         entity: timer.quietcool_whole_house_fan_timer
       styles:
         card:
-          - height: 86px
+          - min-height: 86px
           - border-radius: 20px
           - background: rgba(0, 188, 212, 0.18)
           - padding: 14px
         grid:
-          - grid-template-areas: '"i n" "i l"'
+          - grid-template-areas: '"i n"'
           - grid-template-columns: 52px 1fr
-          - grid-template-rows: min-content min-content
         icon:
           - width: 32px
           - color: var(--primary-color)
         name:
           - justify-self: start
+          - text-align: left
+          - white-space: normal
           - font-weight: 800
-          - font-size: 18px
-        label:
-          - justify-self: start
-          - font-size: 14px
-          - opacity: 0.85
+          - font-size: 17px
 
   - type: conditional
     conditions:
@@ -403,121 +501,3 @@ cards:
         name:
           - font-weight: 800
           - font-size: 16px
-
-  ########################################################
-  # Environment / Advanced
-  ########################################################
-  - type: custom:bubble-card
-    card_type: separator
-    icon: mdi:home-thermometer-outline
-    name: Environment
-    modules: [default]
-
-  - type: grid
-    columns: 3
-    square: false
-    cards:
-      - type: custom:button-card
-        entity: sensor.bedrooms_temperature
-        name: House
-        icon: mdi:home-thermometer
-        show_state: false
-        show_label: true
-        label: >
-          [[[
-            const temp = parseFloat(states['sensor.bedrooms_temperature']?.state);
-            return isNaN(temp) ? '—' : `${temp.toFixed(1)}°F`;
-          ]]]
-        tap_action:
-          action: more-info
-        styles:
-          card:
-            - height: 74px
-            - border-radius: 12px
-            - padding: 10px
-          icon:
-            - width: 24px
-          name:
-            - font-size: 13px
-            - opacity: 0.75
-          label:
-            - font-size: 17px
-            - font-weight: 800
-
-      - type: custom:button-card
-        entity: sensor.whole_house_fan_temperature
-        name: Attic
-        icon: mdi:thermometer-water
-        show_state: false
-        show_label: true
-        label: >
-          [[[
-            const temp = parseFloat(states['sensor.whole_house_fan_temperature']?.state);
-            const hum = parseFloat(states['sensor.whole_house_fan_humidity']?.state);
-            const tempText = isNaN(temp) ? '—' : `${temp.toFixed(1)}°F`;
-            const humText = isNaN(hum) ? '—' : `${hum.toFixed(0)}%`;
-            return `${tempText} · ${humText}`;
-          ]]]
-        tap_action:
-          action: more-info
-        styles:
-          card:
-            - height: 74px
-            - border-radius: 12px
-            - padding: 10px
-          icon:
-            - width: 24px
-          name:
-            - font-size: 13px
-            - opacity: 0.75
-          label:
-            - font-size: 16px
-            - font-weight: 800
-
-      - type: custom:button-card
-        entity: weather.forecast_home
-        name: Outside
-        icon: mdi:weather-partly-cloudy
-        show_state: false
-        show_label: true
-        label: >
-          [[[
-            const weather = states['weather.forecast_home'];
-            const temp = parseFloat(weather?.attributes?.temperature);
-            const hum = parseFloat(weather?.attributes?.humidity);
-            const tempText = isNaN(temp) ? '—' : `${temp.toFixed(1)}°F`;
-            const humText = isNaN(hum) ? '—' : `${hum.toFixed(0)}%`;
-            return `${tempText} · ${humText}`;
-          ]]]
-        tap_action:
-          action: more-info
-        styles:
-          card:
-            - height: 74px
-            - border-radius: 12px
-            - padding: 10px
-          icon:
-            - width: 24px
-          name:
-            - font-size: 13px
-            - opacity: 0.75
-          label:
-            - font-size: 16px
-            - font-weight: 800
-
-  - type: custom:bubble-card
-    card_type: button
-    button_type: name
-    name: Advanced / Debug
-    icon: mdi:tune
-    button_action:
-      tap_action:
-        action: navigate
-        navigation_path: '#quietcool-advanced'
-    sub_button:
-      - entity: switch.whole_house_fan_quietcool_esp_ble_connection
-        show_state: true
-        show_name: false
-      - entity: sensor.whole_house_fan_pairing_mode
-        show_state: true
-        show_name: false

@@ -3,8 +3,9 @@ path: fans
 icon: mdi:fan
 
 cards:
-  - !include fans/attic_fan_panel.yaml
   - !include fans/whole_house_fan_panel.yaml
+  - !include fans/attic_fan_panel.yaml
+  - !include fans/attic_management_popup.yaml
   - !include fans/attic_timer_popup.yaml
   - !include fans/whole_house_timer_popup.yaml
   - !include fans/advanced_popup.yaml

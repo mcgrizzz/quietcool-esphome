@@ -202,7 +202,7 @@ cards:
     square: false
     cards:
       - type: custom:button-card
-        name: Start → Smart
+        name: Run, then Smart
         icon: mdi:timer-play-outline
         show_label: true
         label: >
@@ -270,7 +270,7 @@ cards:
             - opacity: 0.82
 
       - type: custom:button-card
-        name: Start → Off
+        name: Run, then Off
         icon: mdi:timer-off-outline
         show_label: true
         label: >
