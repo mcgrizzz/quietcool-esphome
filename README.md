@@ -2,7 +2,7 @@
 
 FORK NOTICE:
 
-I've updated a bunch of the ESPHome stuff in ./quietcool-smart-attic-fan-control.yaml. All the other files are specific to my home assistant integration. Furthermore, the changes in the ESPHome are vibecode, but I did a lot of testing to get some more of the json api figured out. 
+I've updated a bunch of the ESPHome stuff in ./quietcool-smart-attic-fan-control.yaml. All the other files are specific to my home assistant integration. Furthermore, the changes in the ESPHome are vibecoded, but I did a lot of testing to get some more of the json api figured out. 
 
 > [!NOTE]
 > The QuietCool Smart Attic Fan Control works with both whole house fans and attic fans.  In my application, I used it for a whole house fan.  This project requires having a Smart Attic Fan Control, which can be purchased separately from QuietCool and is a drop-in replacement for the RF controller.
