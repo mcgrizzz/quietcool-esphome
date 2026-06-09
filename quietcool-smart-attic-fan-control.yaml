@@ -80,7 +80,9 @@ script:
     then:
       - script.execute:
           id: send_ble_msg
-          msg: !lambda return "{\"A\":18,\"S\":\"" + speed + "\"}";
+          msg: !lambda |-
+            std::string command_speed = (speed == "MEDIUM") ? "MED" : speed;
+            return "{\"A\":18,\"S\":\"" + command_speed + "\"}";
       - script.wait: send_ble_msg
       - delay: 1s
       - script.execute:
@@ -96,7 +98,9 @@ script:
     then:
       - script.execute:
           id: send_ble_msg
-          msg: !lambda return "{\"A\":7,\"H\":" + std::to_string(hours) + ",\"M\":" + std::to_string(minutes) + ",\"R\":\"" + speed + "\"}";
+          msg: !lambda |-
+            std::string command_speed = (speed == "MEDIUM") ? "MED" : speed;
+            return "{\"A\":7,\"H\":" + std::to_string(hours) + ",\"M\":" + std::to_string(minutes) + ",\"R\":\"" + command_speed + "\"}";
       - script.wait: send_ble_msg
       - delay: 1s
       - script.execute:

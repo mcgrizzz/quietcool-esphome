@@ -1,0 +1,575 @@
+############################################################
+# MAIN REMOTE
+############################################################
+type: vertical-stack
+cards:
+  ########################################################
+  # Status Hero
+  ########################################################
+  - type: custom:button-card
+    entity: fan.attic_exhaust_fan_quietcool_fan
+    name: Attic Exhaust Fan
+    icon: mdi:fan
+    show_state: false
+    show_label: true
+    label: >
+      [[[
+        const temp = parseFloat(states['sensor.attic_exhaust_fan_temperature']?.state);
+        const hum = parseFloat(states['sensor.attic_exhaust_fan_humidity']?.state);
+        const modeRaw = states['sensor.attic_exhaust_fan_mode']?.state || '—';
+        const speedRaw = states['sensor.attic_exhaust_fan_live_speed']?.state || '—';
+
+        const tempText = isNaN(temp) ? '—' : temp.toFixed(1) + '°F';
+        const humText = isNaN(hum) ? '—' : hum.toFixed(0) + '%';
+
+        const mode =
+          modeRaw === 'TH' ? 'Smart' :
+          modeRaw === 'Idle' ? 'Off' :
+          modeRaw === 'Run' ? 'Manual' :
+          modeRaw === 'Timer' ? 'Timer' :
+          modeRaw;
+
+        const speed =
+          speedRaw === 'CLOSE' ? 'Off' :
+          speedRaw === 'LOW' ? 'Low' :
+          speedRaw === 'MED' ? 'Medium' :
+          speedRaw === 'MEDIUM' ? 'Medium' :
+          speedRaw === 'HIGH' ? 'High' :
+          speedRaw;
+
+        return `${tempText} · ${humText} humidity · ${mode} · ${speed}`;
+      ]]]
+    tap_action:
+      action: more-info
+    styles:
+      card:
+        - padding: 20px
+        - border-radius: 22px
+      grid:
+        - grid-template-areas: '"i n" "i l"'
+        - grid-template-columns: 58px 1fr
+        - grid-template-rows: min-content min-content
+      img_cell:
+        - width: 48px
+        - height: 48px
+        - border-radius: 50%
+        - background: rgba(0, 188, 212, 0.12)
+      icon:
+        - width: 30px
+        - color: >
+            [[[
+              const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+              return speed === 'CLOSE' ? 'var(--error-color)' : 'var(--primary-color)';
+            ]]]
+        - animation: >
+            [[[
+              const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+              return ['LOW', 'MED', 'MEDIUM', 'HIGH'].includes(speed)
+                ? 'qc-spin 1.1s linear infinite'
+                : 'none';
+            ]]]
+      name:
+        - justify-self: start
+        - font-size: 24px
+        - font-weight: 800
+      label:
+        - justify-self: start
+        - font-size: 14px
+        - opacity: 0.85
+        - margin-top: 4px
+    extra_styles: |
+      @keyframes qc-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+  ########################################################
+  # Main Controls
+  ########################################################
+  - type: custom:bubble-card
+    card_type: separator
+    icon: mdi:remote
+    name: Controls
+    modules: [default]
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: custom:button-card
+        name: OFF
+        icon: mdi:fan-off
+        show_state: false
+        tap_action:
+          action: call-service
+          service: script.quietcool_cancel_timer_then_off
+        styles:
+          card:
+            - height: 76px
+            - border-radius: 20px
+            - background: >
+                [[[
+                  const mode = states['sensor.attic_exhaust_fan_mode']?.state;
+                  return mode === 'Idle'
+                    ? 'rgba(244, 67, 54, 0.18)'
+                    : 'var(--ha-card-background)';
+                ]]]
+          icon:
+            - width: 30px
+            - color: >
+                [[[
+                  const mode = states['sensor.attic_exhaust_fan_mode']?.state;
+                  return mode === 'Idle' ? 'var(--error-color)' : 'var(--primary-text-color)';
+                ]]]
+          name:
+            - font-weight: 800
+            - font-size: 17px
+            - letter-spacing: 0
+            - color: >
+                [[[
+                  const mode = states['sensor.attic_exhaust_fan_mode']?.state;
+                  return mode === 'Idle' ? 'var(--error-color)' : 'var(--primary-text-color)';
+                ]]]
+
+      - type: custom:button-card
+        name: Smart
+        icon: mdi:thermostat-auto
+        show_state: false
+        tap_action:
+          action: call-service
+          service: script.quietcool_cancel_timer_then_smart
+        styles:
+          card:
+            - height: 76px
+            - border-radius: 20px
+            - background: >
+                [[[
+                  return states['sensor.attic_exhaust_fan_mode']?.state === 'TH'
+                    ? 'rgba(0, 188, 212, 0.22)'
+                    : 'var(--ha-card-background)';
+                ]]]
+          icon:
+            - width: 30px
+          name:
+            - font-weight: 800
+            - font-size: 16px
+
+  - type: grid
+    columns: 3
+    square: false
+    cards:
+      - type: custom:button-card
+        name: Low
+        icon: mdi:fan-speed-1
+        show_state: false
+        tap_action:
+          action: call-service
+          service: script.quietcool_cancel_timer_then_run
+          service_data:
+            run_button: button.attic_exhaust_fan_quietcool_run_low
+            run_speed: LOW
+            raw_command_text: text.attic_exhaust_fan_raw_quietcool_command
+            send_raw_button: button.attic_exhaust_fan_send_raw_quietcool_command
+        styles:
+          card:
+            - height: 86px
+            - border-radius: 20px
+            - background: >
+                [[[
+                  const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+                  return speed === 'LOW'
+                    ? 'rgba(0, 188, 212, 0.22)'
+                    : 'var(--ha-card-background)';
+                ]]]
+          icon:
+            - width: 34px
+            - color: >
+                [[[
+                  const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+                  return speed === 'CLOSE' ? 'var(--error-color)' : 'var(--primary-text-color)';
+                ]]]
+            - animation: >
+                [[[
+                  const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+                  return speed === 'LOW'
+                    ? 'qc-spin 2s linear infinite'
+                    : 'none';
+                ]]]
+          name:
+            - font-weight: 800
+            - font-size: 16px
+        extra_styles: |
+          @keyframes qc-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+
+      - type: custom:button-card
+        name: Medium
+        icon: mdi:fan-speed-2
+        show_state: false
+        tap_action:
+          action: call-service
+          service: script.quietcool_cancel_timer_then_run
+          service_data:
+            run_button: button.attic_exhaust_fan_quietcool_run_medium
+            run_speed: MED
+            raw_command_text: text.attic_exhaust_fan_raw_quietcool_command
+            send_raw_button: button.attic_exhaust_fan_send_raw_quietcool_command
+        styles:
+          card:
+            - height: 86px
+            - border-radius: 20px
+            - background: >
+                [[[
+                  const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+                  return speed === 'MED' || speed === 'MEDIUM'
+                    ? 'rgba(0, 188, 212, 0.22)'
+                    : 'var(--ha-card-background)';
+                ]]]
+          icon:
+            - width: 34px
+            - color: >
+                [[[
+                  const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+                  return speed === 'CLOSE' ? 'var(--error-color)' : 'var(--primary-text-color)';
+                ]]]
+            - animation: >
+                [[[
+                  const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+                  return speed === 'MED' || speed === 'MEDIUM'
+                    ? 'qc-spin 1.2s linear infinite'
+                    : 'none';
+                ]]]
+          name:
+            - font-weight: 800
+            - font-size: 16px
+        extra_styles: |
+          @keyframes qc-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+
+      - type: custom:button-card
+        name: High
+        icon: mdi:fan-speed-3
+        show_state: false
+        tap_action:
+          action: call-service
+          service: script.quietcool_cancel_timer_then_run
+          service_data:
+            run_button: button.attic_exhaust_fan_quietcool_run_high
+            run_speed: HIGH
+            raw_command_text: text.attic_exhaust_fan_raw_quietcool_command
+            send_raw_button: button.attic_exhaust_fan_send_raw_quietcool_command
+        styles:
+          card:
+            - height: 86px
+            - border-radius: 20px
+            - background: >
+                [[[
+                  const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+                  return speed === 'HIGH'
+                    ? 'rgba(0, 188, 212, 0.22)'
+                    : 'var(--ha-card-background)';
+                ]]]
+          icon:
+            - width: 34px
+            - color: >
+                [[[
+                  const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+                  return speed === 'CLOSE' ? 'var(--error-color)' : 'var(--primary-text-color)';
+                ]]]
+            - animation: >
+                [[[
+                  const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+                  return speed === 'HIGH'
+                    ? 'qc-spin 0.75s linear infinite'
+                    : 'none';
+                ]]]
+          name:
+            - font-weight: 800
+            - font-size: 16px
+        extra_styles: |
+          @keyframes qc-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+
+  ########################################################
+  # Timer
+  ########################################################
+  - type: custom:bubble-card
+    card_type: separator
+    icon: mdi:timer-outline
+    name: Timer
+    modules: [default]
+
+  # Simple "open timer popup" button
+  - type: custom:bubble-card
+    card_type: button
+    button_type: name
+    name: Start Timer
+    icon: mdi:timer-play-outline
+    button_action:
+      tap_action:
+        action: navigate
+        navigation_path: '#quietcool-timer'
+
+  # Visible status while the HA-side timer is running
+  - type: conditional
+    conditions:
+      - entity: timer.quietcool_attic_fan_timer
+        state: active
+    card:
+      type: custom:button-card
+      update_timer: 1000
+      triggers_update:
+        - timer.quietcool_attic_fan_timer
+        - input_select.quietcool_timer_finish_action
+      name: Timer Running
+      icon: mdi:timer-sand
+      show_state: false
+      show_label: true
+      label: >
+        [[[
+          const finish = states['input_select.quietcool_timer_finish_action']?.state || 'Smart';
+          const timer = states['timer.quietcool_attic_fan_timer'];
+
+          const finishesAt = timer?.attributes?.finishes_at;
+          let remaining = 'running';
+
+          if (finishesAt) {
+            const end = new Date(finishesAt).getTime();
+            const now = Date.now();
+            const seconds = Math.max(0, Math.floor((end - now) / 1000));
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            remaining = h > 0
+              ? `${h}h ${String(m).padStart(2, '0')}m`
+              : `${m}:${String(s).padStart(2, '0')}`;
+          }
+
+          return `${remaining} left · then ${finish}`;
+        ]]]
+      tap_action:
+        action: more-info
+        entity: timer.quietcool_attic_fan_timer
+      styles:
+        card:
+          - height: 86px
+          - border-radius: 20px
+          - background: rgba(0, 188, 212, 0.18)
+          - padding: 14px
+        grid:
+          - grid-template-areas: '"i n" "i l"'
+          - grid-template-columns: 52px 1fr
+          - grid-template-rows: min-content min-content
+        icon:
+          - width: 32px
+          - color: var(--primary-color)
+        name:
+          - justify-self: start
+          - font-weight: 800
+          - font-size: 18px
+        label:
+          - justify-self: start
+          - font-size: 14px
+          - opacity: 0.85
+
+  - type: conditional
+    conditions:
+      - entity: timer.quietcool_attic_fan_timer
+        state: active
+    card:
+      type: custom:button-card
+      name: Cancel Timer
+      icon: mdi:timer-remove-outline
+      show_state: false
+      tap_action:
+        action: custom
+        custom: |
+          [[[
+            const status = states['input_text.quietcool_attic_fan_command_status']?.state || 'Idle';
+            const pending = status.startsWith('Sending') || status.startsWith('Retry');
+            if (pending) return;
+            hass.callService('script', 'quietcool_cancel_timer_then_previous_state', {
+              timer_entity: 'timer.quietcool_attic_fan_timer',
+              previous_mode_entity: 'input_select.quietcool_attic_fan_timer_previous_mode',
+              previous_speed_entity: 'input_select.quietcool_attic_fan_timer_previous_speed',
+              raw_command_text: 'text.attic_exhaust_fan_raw_quietcool_command',
+              send_raw_button: 'button.attic_exhaust_fan_send_raw_quietcool_command',
+              current_mode_entity: 'sensor.attic_exhaust_fan_mode',
+              live_speed_entity: 'sensor.attic_exhaust_fan_live_speed',
+              status_entity: 'input_text.quietcool_attic_fan_command_status',
+              smart_button: 'button.attic_exhaust_fan_start_quietcool_smart_mode',
+              off_button: 'button.attic_exhaust_fan_stop_quietcool_fan',
+              fallback_speed: 'LOW'
+            });
+          ]]]
+      styles:
+        card:
+          - height: 68px
+          - border-radius: 20px
+          - background: >
+              [[[
+                const status = states['input_text.quietcool_attic_fan_command_status']?.state || 'Idle';
+                return status.startsWith('Sending') || status.startsWith('Retry')
+                  ? 'rgba(158, 158, 158, 0.14)'
+                  : 'rgba(244, 67, 54, 0.16)';
+              ]]]
+          - opacity: >
+              [[[
+                const status = states['input_text.quietcool_attic_fan_command_status']?.state || 'Idle';
+                return status.startsWith('Sending') || status.startsWith('Retry') ? '0.55' : '1';
+              ]]]
+        icon:
+          - width: 28px
+          - color: >
+              [[[
+                const status = states['input_text.quietcool_attic_fan_command_status']?.state || 'Idle';
+                return status.startsWith('Sending') || status.startsWith('Retry')
+                  ? 'var(--disabled-text-color)'
+                  : 'var(--error-color)';
+              ]]]
+        name:
+          - font-weight: 800
+          - font-size: 16px
+
+  ########################################################
+  # Status / Advanced
+  ########################################################
+  - type: custom:bubble-card
+    card_type: separator
+    icon: mdi:information-outline
+    name: Status
+    modules: [default]
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: tile
+        entity: sensor.attic_exhaust_fan_temperature
+        name: Temperature
+        icon: mdi:thermometer
+
+      - type: tile
+        entity: sensor.attic_exhaust_fan_humidity
+        name: Humidity
+        icon: mdi:water-percent
+
+      - type: custom:button-card
+        entity: sensor.attic_exhaust_fan_mode
+        name: Mode
+        icon: mdi:tune-variant
+        show_state: false
+        show_label: true
+        label: >
+          [[[
+            const modeRaw = states['sensor.attic_exhaust_fan_mode']?.state || '—';
+            return modeRaw === 'TH' ? 'SMART' :
+              modeRaw === 'Idle' ? 'OFF' :
+              modeRaw === 'Run' ? 'Manual' :
+              modeRaw === 'Timer' ? 'Timer' :
+              modeRaw;
+          ]]]
+        tap_action:
+          action: more-info
+        styles:
+          card:
+            - height: 64px
+            - border-radius: 12px
+            - padding: 10px 14px
+          grid:
+            - grid-template-areas: '"i n" "i l"'
+            - grid-template-columns: 38px 1fr
+            - grid-template-rows: min-content min-content
+          icon:
+            - width: 24px
+            - color: >
+                [[[
+                  const mode = states['sensor.attic_exhaust_fan_mode']?.state;
+                  return mode === 'Idle' ? 'var(--error-color)' : 'var(--primary-color)';
+                ]]]
+          name:
+            - justify-self: start
+            - font-size: 13px
+            - opacity: 0.75
+          label:
+            - justify-self: start
+            - font-size: 15px
+            - font-weight: 600
+
+      - type: custom:button-card
+        entity: sensor.attic_exhaust_fan_live_speed
+        name: Speed
+        icon: mdi:fan
+        show_state: false
+        show_label: true
+        label: >
+          [[[
+            const speedRaw = states['sensor.attic_exhaust_fan_live_speed']?.state || '—';
+            return speedRaw === 'CLOSE' || speedRaw === 'Closed' ? 'OFF' :
+              speedRaw === 'LOW' ? 'Low' :
+              speedRaw === 'MED' ? 'Medium' :
+              speedRaw === 'MEDIUM' ? 'Medium' :
+              speedRaw === 'HIGH' ? 'High' :
+              speedRaw;
+          ]]]
+        tap_action:
+          action: more-info
+        styles:
+          card:
+            - height: 64px
+            - border-radius: 12px
+            - padding: 10px 14px
+          grid:
+            - grid-template-areas: '"i n" "i l"'
+            - grid-template-columns: 38px 1fr
+            - grid-template-rows: min-content min-content
+          icon:
+            - width: 24px
+            - color: >
+                [[[
+                  const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+                  return speed === 'CLOSE' || speed === 'Closed' ? 'var(--error-color)' : 'var(--primary-color)';
+                ]]]
+            - animation: >
+                [[[
+                  const speed = states['sensor.attic_exhaust_fan_live_speed']?.state;
+                  return ['LOW', 'MED', 'MEDIUM', 'HIGH'].includes(speed)
+                    ? 'qc-spin 1.1s linear infinite'
+                    : 'none';
+                ]]]
+          name:
+            - justify-self: start
+            - font-size: 13px
+            - opacity: 0.75
+          label:
+            - justify-self: start
+            - font-size: 15px
+            - font-weight: 600
+        extra_styles: |
+          @keyframes qc-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+
+  - type: custom:bubble-card
+    card_type: button
+    button_type: name
+    name: Advanced / Debug
+    icon: mdi:tune
+    button_action:
+      tap_action:
+        action: navigate
+        navigation_path: '#quietcool-advanced'
+    sub_button:
+      - entity: switch.attic_exhaust_fan_quietcool_esp_ble_connection
+        show_state: true
+        show_name: false
+      - entity: sensor.attic_exhaust_fan_pairing_mode
+        show_state: true
+        show_name: false

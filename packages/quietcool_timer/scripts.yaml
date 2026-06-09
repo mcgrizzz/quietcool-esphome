@@ -1,0 +1,949 @@
+script:
+  quietcool_set_command_status:
+    alias: QuietCool Set Command Status
+    mode: queued
+    max: 10
+    fields:
+      status_entity:
+        name: Status helper
+        required: false
+        selector:
+          entity:
+            domain: input_text
+      status:
+        name: Status
+        required: true
+        selector:
+          text:
+    sequence:
+      - if:
+          - condition: template
+            value_template: "{{ status_entity is defined and status_entity | string | length > 0 }}"
+        then:
+          - service: input_text.set_value
+            target:
+              entity_id: "{{ status_entity }}"
+            data:
+              value: "{{ status }}"
+
+  quietcool_press_mode_button_confirmed:
+    alias: QuietCool Press Mode Button Confirmed
+    mode: queued
+    max: 10
+    fields:
+      button_entity:
+        name: Button entity
+        required: true
+        selector:
+          entity:
+            domain: button
+      mode_entity:
+        name: Mode sensor
+        required: false
+        selector:
+          entity:
+            domain: sensor
+      expected_mode:
+        name: Expected mode
+        required: true
+        selector:
+          text:
+      status_entity:
+        name: Status helper
+        required: false
+        selector:
+          entity:
+            domain: input_text
+      command_label:
+        name: Command label
+        required: false
+        selector:
+          text:
+    sequence:
+      - variables:
+          label: "{{ command_label | default(expected_mode, true) }}"
+          can_confirm: "{{ mode_entity is defined and mode_entity | string | length > 0 }}"
+      - service: script.quietcool_set_command_status
+        data:
+          status_entity: "{{ status_entity | default('', true) }}"
+          status: "Sending {{ label }}"
+      - repeat:
+          count: 3
+          sequence:
+            - service: button.press
+              target:
+                entity_id: "{{ button_entity }}"
+            - if:
+                - condition: template
+                  value_template: "{{ can_confirm }}"
+              then:
+                - wait_template: "{{ states(mode_entity) == expected_mode }}"
+                  timeout: "00:00:07"
+                  continue_on_timeout: true
+              else:
+                - delay:
+                    seconds: 1
+            - if:
+                - condition: template
+                  value_template: "{{ not can_confirm or wait.completed | default(false) }}"
+              then:
+                - service: script.quietcool_set_command_status
+                  data:
+                    status_entity: "{{ status_entity | default('', true) }}"
+                    status: "Confirmed {{ label }}"
+                - stop: "QuietCool command confirmed"
+            - service: script.quietcool_set_command_status
+              data:
+                status_entity: "{{ status_entity | default('', true) }}"
+                status: "Retry {{ repeat.index }}: {{ label }}"
+            - delay:
+                seconds: "{{ repeat.index * 2 }}"
+      - service: script.quietcool_set_command_status
+        data:
+          status_entity: "{{ status_entity | default('', true) }}"
+          status: "Not confirmed: {{ label }}"
+
+  quietcool_raw_run_confirmed:
+    alias: QuietCool Raw Run Confirmed
+    mode: queued
+    max: 10
+    fields:
+      run_speed:
+        name: Run speed
+        required: true
+        selector:
+          select:
+            options:
+              - LOW
+              - MED
+              - HIGH
+      raw_command_text:
+        name: Raw command text entity
+        required: true
+        selector:
+          entity:
+            domain: text
+      send_raw_button:
+        name: Send raw command button
+        required: true
+        selector:
+          entity:
+            domain: button
+      mode_entity:
+        name: Mode sensor
+        required: false
+        selector:
+          entity:
+            domain: sensor
+      live_speed_entity:
+        name: Live speed sensor
+        required: false
+        selector:
+          entity:
+            domain: sensor
+      status_entity:
+        name: Status helper
+        required: false
+        selector:
+          entity:
+            domain: input_text
+    sequence:
+      - variables:
+          command_speed: >-
+            {% if run_speed == 'MEDIUM' %}
+              MED
+            {% elif run_speed in ['LOW', 'MED', 'HIGH'] %}
+              {{ run_speed }}
+            {% else %}
+              LOW
+            {% endif %}
+          can_confirm: >-
+            {{ mode_entity is defined and mode_entity | string | length > 0
+               and live_speed_entity is defined and live_speed_entity | string | length > 0 }}
+      - service: script.quietcool_set_command_status
+        data:
+          status_entity: "{{ status_entity | default('', true) }}"
+          status: "Sending Run {{ command_speed | trim }}"
+      - repeat:
+          count: 3
+          sequence:
+            - service: text.set_value
+              target:
+                entity_id: "{{ raw_command_text }}"
+              data:
+                value: "{{ '{\"A\":18,\"S\":\"' ~ (command_speed | trim) ~ '\"}' }}"
+            - service: button.press
+              target:
+                entity_id: "{{ send_raw_button }}"
+            - delay:
+                milliseconds: 800
+            - service: text.set_value
+              target:
+                entity_id: "{{ raw_command_text }}"
+              data:
+                value: '{"A":9,"M":"Run"}'
+            - service: button.press
+              target:
+                entity_id: "{{ send_raw_button }}"
+            - if:
+                - condition: template
+                  value_template: "{{ can_confirm }}"
+              then:
+                - wait_template: >-
+                    {{ states(mode_entity) == 'Run'
+                       and (
+                         states(live_speed_entity) == (command_speed | trim)
+                         or ((command_speed | trim) == 'MED' and states(live_speed_entity) == 'MEDIUM')
+                       ) }}
+                  timeout: "00:00:08"
+                  continue_on_timeout: true
+              else:
+                - delay:
+                    seconds: 1
+            - if:
+                - condition: template
+                  value_template: "{{ not can_confirm or wait.completed | default(false) }}"
+              then:
+                - service: script.quietcool_set_command_status
+                  data:
+                    status_entity: "{{ status_entity | default('', true) }}"
+                    status: "Confirmed Run {{ command_speed | trim }}"
+                - stop: "QuietCool run command confirmed"
+            - service: script.quietcool_set_command_status
+              data:
+                status_entity: "{{ status_entity | default('', true) }}"
+                status: "Retry {{ repeat.index }}: Run {{ command_speed | trim }}"
+            - delay:
+                seconds: "{{ repeat.index * 2 }}"
+      - service: script.quietcool_set_command_status
+        data:
+          status_entity: "{{ status_entity | default('', true) }}"
+          status: "Not confirmed: Run {{ command_speed | trim }}"
+
+  quietcool_set_timer_duration:
+    alias: QuietCool Set Timer Duration
+    mode: restart
+    fields:
+      total_minutes:
+        name: Total minutes
+        required: true
+        selector:
+          number:
+            min: 1
+            max: 720
+            step: 1
+      hours_entity:
+        name: Hours entity
+        required: true
+        selector:
+          entity:
+            domain:
+              - number
+              - input_number
+      minutes_entity:
+        name: Minutes entity
+        required: true
+        selector:
+          entity:
+            domain:
+              - number
+              - input_number
+    sequence:
+      - variables:
+          clamped_minutes: "{{ [720, [1, total_minutes | int(0)] | max] | min }}"
+          duration_hours: "{{ (clamped_minutes | int(0) // 60) | int }}"
+          duration_minutes: "{{ (clamped_minutes | int(0) % 60) | int }}"
+          hours_set_service: >-
+            {{ 'input_number.set_value' if (hours_entity | string).startswith('input_number.') else 'number.set_value' }}
+          minutes_set_service: >-
+            {{ 'input_number.set_value' if (minutes_entity | string).startswith('input_number.') else 'number.set_value' }}
+      - service: "{{ hours_set_service }}"
+        target:
+          entity_id: "{{ hours_entity }}"
+        data:
+          value: "{{ duration_hours }}"
+      - service: "{{ minutes_set_service }}"
+        target:
+          entity_id: "{{ minutes_entity }}"
+        data:
+          value: "{{ duration_minutes }}"
+
+  quietcool_adjust_timer_duration:
+    alias: QuietCool Adjust Timer Duration
+    mode: restart
+    fields:
+      delta_minutes:
+        name: Delta minutes
+        required: true
+        selector:
+          number:
+            min: -720
+            max: 720
+            step: 1
+      hours_entity:
+        name: Hours entity
+        required: true
+        selector:
+          entity:
+            domain:
+              - number
+              - input_number
+      minutes_entity:
+        name: Minutes entity
+        required: true
+        selector:
+          entity:
+            domain:
+              - number
+              - input_number
+    sequence:
+      - variables:
+          current_minutes: "{{ (states(hours_entity) | int(0) * 60) + (states(minutes_entity) | int(0)) }}"
+          next_minutes: "{{ (current_minutes | int(0)) + (delta_minutes | int(0)) }}"
+      - service: script.quietcool_set_timer_duration
+        data:
+          total_minutes: "{{ next_minutes }}"
+          hours_entity: "{{ hours_entity }}"
+          minutes_entity: "{{ minutes_entity }}"
+
+  quietcool_cancel_timer:
+    alias: QuietCool Cancel Timer
+    mode: restart
+    fields:
+      timer_entity:
+        name: Optional HA timer entity
+        required: false
+        selector:
+          entity:
+            domain: timer
+    sequence:
+      - variables:
+          target_timer: >-
+            {{ timer_entity if timer_entity is defined and timer_entity | string | length > 0
+               else 'timer.quietcool_attic_fan_timer' }}
+      - if:
+          - condition: template
+            value_template: "{{ not is_state('script.quietcool_start_timed_run', 'off') }}"
+        then:
+          - service: script.turn_off
+            target:
+              entity_id: script.quietcool_start_timed_run
+      - if:
+          - condition: template
+            value_template: "{{ states(target_timer) in ['active', 'paused'] }}"
+        then:
+          - service: timer.cancel
+            target:
+              entity_id: "{{ target_timer }}"
+
+  quietcool_cancel_timer_then_smart:
+    alias: QuietCool Cancel Timer Then Smart
+    mode: restart
+    sequence:
+      - service: script.quietcool_cancel_timer
+      - service: button.press
+        target:
+          entity_id: button.attic_exhaust_fan_start_quietcool_smart_mode
+
+  quietcool_cancel_timer_then_off:
+    alias: QuietCool Cancel Timer Then Off
+    mode: restart
+    fields:
+      timer_entity:
+        name: Optional HA timer entity
+        required: false
+        selector:
+          entity:
+            domain: timer
+      off_button:
+        name: Off button
+        required: false
+        selector:
+          entity:
+            domain: button
+    sequence:
+      - service: script.quietcool_cancel_timer
+        data:
+          timer_entity: >-
+            {{ timer_entity if timer_entity is defined and timer_entity | string | length > 0
+               else 'timer.quietcool_attic_fan_timer' }}
+      - service: button.press
+        target:
+          entity_id: >-
+            {{ off_button if off_button is defined and off_button | string | length > 0
+               else 'button.attic_exhaust_fan_stop_quietcool_fan' }}
+
+  quietcool_cancel_timer_then_previous_state:
+    alias: QuietCool Cancel Timer Then Previous State
+    mode: restart
+    fields:
+      timer_entity:
+        name: Optional HA timer entity
+        required: false
+        selector:
+          entity:
+            domain: timer
+      previous_mode_entity:
+        name: Previous mode helper
+        required: true
+        selector:
+          entity:
+            domain: input_select
+      previous_speed_entity:
+        name: Previous speed helper
+        required: true
+        selector:
+          entity:
+            domain: input_select
+      raw_command_text:
+        name: Raw command text entity
+        required: false
+        selector:
+          entity:
+            domain: text
+      send_raw_button:
+        name: Send raw command button
+        required: false
+        selector:
+          entity:
+            domain: button
+      current_mode_entity:
+        name: Current mode sensor
+        required: false
+        selector:
+          entity:
+            domain: sensor
+      live_speed_entity:
+        name: Live speed sensor
+        required: false
+        selector:
+          entity:
+            domain: sensor
+      status_entity:
+        name: Status helper
+        required: false
+        selector:
+          entity:
+            domain: input_text
+      smart_button:
+        name: Smart mode button
+        required: false
+        selector:
+          entity:
+            domain: button
+      off_button:
+        name: Off button
+        required: true
+        selector:
+          entity:
+            domain: button
+      fallback_speed:
+        name: Fallback speed
+        required: false
+        default: LOW
+        selector:
+          select:
+            options:
+              - LOW
+              - MED
+              - HIGH
+    sequence:
+      - variables:
+          previous_mode: "{{ states(previous_mode_entity) }}"
+          previous_speed: >-
+            {% set speed = states(previous_speed_entity) %}
+            {% if speed in ['LOW', 'MED', 'HIGH'] %}
+              {{ speed }}
+            {% elif fallback_speed | default('LOW') in ['LOW', 'MED', 'HIGH'] %}
+              {{ fallback_speed | default('LOW') }}
+            {% else %}
+              LOW
+            {% endif %}
+          has_smart_button: "{{ smart_button is defined and smart_button | string | length > 0 }}"
+      - service: script.quietcool_cancel_timer
+        data:
+          timer_entity: >-
+            {{ timer_entity if timer_entity is defined and timer_entity | string | length > 0
+               else 'timer.quietcool_attic_fan_timer' }}
+      - delay:
+          seconds: 2
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ previous_mode == 'Smart' and has_smart_button }}"
+            sequence:
+              - service: script.quietcool_press_mode_button_confirmed
+                data:
+                  button_entity: "{{ smart_button }}"
+                  mode_entity: "{{ current_mode_entity | default('', true) }}"
+                  expected_mode: TH
+                  status_entity: "{{ status_entity | default('', true) }}"
+                  command_label: Smart
+          - conditions:
+              - condition: template
+                value_template: "{{ previous_mode == 'Run' }}"
+            sequence:
+              - service: script.quietcool_cancel_timer_then_run
+                data:
+                  timer_entity: >-
+                    {{ timer_entity if timer_entity is defined and timer_entity | string | length > 0
+                       else 'timer.quietcool_attic_fan_timer' }}
+                  run_speed: "{{ previous_speed | trim }}"
+                  raw_command_text: "{{ raw_command_text }}"
+                  send_raw_button: "{{ send_raw_button }}"
+                  current_mode_entity: "{{ current_mode_entity | default('', true) }}"
+                  live_speed_entity: "{{ live_speed_entity | default('', true) }}"
+                  status_entity: "{{ status_entity | default('', true) }}"
+        default:
+          - service: script.quietcool_press_mode_button_confirmed
+            data:
+              button_entity: "{{ off_button }}"
+              mode_entity: "{{ current_mode_entity | default('', true) }}"
+              expected_mode: Idle
+              status_entity: "{{ status_entity | default('', true) }}"
+              command_label: "Off"
+
+  quietcool_cancel_timer_then_run:
+    alias: QuietCool Cancel Timer Then Run
+    mode: restart
+    fields:
+      run_button:
+        name: Run button
+        required: false
+        selector:
+          entity:
+            domain: button
+      run_speed:
+        name: Run speed
+        required: false
+        selector:
+          select:
+            options:
+              - LOW
+              - MED
+              - HIGH
+      raw_command_text:
+        name: Raw command text entity
+        required: false
+        selector:
+          entity:
+            domain: text
+      send_raw_button:
+        name: Send raw command button
+        required: false
+        selector:
+          entity:
+            domain: button
+      current_mode_entity:
+        name: Current mode sensor
+        required: false
+        selector:
+          entity:
+            domain: sensor
+      live_speed_entity:
+        name: Live speed sensor
+        required: false
+        selector:
+          entity:
+            domain: sensor
+      status_entity:
+        name: Status helper
+        required: false
+        selector:
+          entity:
+            domain: input_text
+      timer_entity:
+        name: Optional HA timer entity
+        required: false
+        selector:
+          entity:
+            domain: timer
+    sequence:
+      - service: script.quietcool_cancel_timer
+        data:
+          timer_entity: >-
+            {{ timer_entity if timer_entity is defined and timer_entity | string | length > 0
+               else 'timer.quietcool_attic_fan_timer' }}
+      - variables:
+          use_raw_run: >-
+            {{ run_speed is defined and run_speed | string | length > 0
+               and raw_command_text is defined and raw_command_text | string | length > 0
+               and send_raw_button is defined and send_raw_button | string | length > 0 }}
+          command_speed: >-
+            {% if run_speed == 'MEDIUM' %}
+              MED
+            {% elif run_speed in ['LOW', 'MED', 'HIGH'] %}
+              {{ run_speed }}
+            {% else %}
+              LOW
+            {% endif %}
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ use_raw_run }}"
+            sequence:
+              - service: script.quietcool_raw_run_confirmed
+                data:
+                  run_speed: "{{ command_speed | trim }}"
+                  raw_command_text: "{{ raw_command_text }}"
+                  send_raw_button: "{{ send_raw_button }}"
+                  mode_entity: "{{ current_mode_entity | default('', true) }}"
+                  live_speed_entity: "{{ live_speed_entity | default('', true) }}"
+                  status_entity: "{{ status_entity | default('', true) }}"
+        default:
+          - service: button.press
+            target:
+              entity_id: "{{ run_button }}"
+
+  quietcool_cancel_timer_then_finish_action:
+    alias: QuietCool Cancel Timer Then Finish Action
+    mode: restart
+    sequence:
+      - variables:
+          finish_action: "{{ states('input_select.quietcool_timer_finish_action') }}"
+      - service: script.quietcool_cancel_timer
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ finish_action == 'Smart' }}"
+            sequence:
+              - service: button.press
+                target:
+                  entity_id: button.attic_exhaust_fan_start_quietcool_smart_mode
+          - conditions:
+              - condition: template
+                value_template: "{{ finish_action == 'Off' }}"
+            sequence:
+              - service: button.press
+                target:
+                  entity_id: button.attic_exhaust_fan_stop_quietcool_fan
+        default:
+          - service: button.press
+            target:
+              entity_id: button.attic_exhaust_fan_start_quietcool_smart_mode
+
+  quietcool_start_timed_run:
+    alias: QuietCool Start Timed Run
+    mode: restart
+    fields:
+      hours_entity:
+        name: Hours entity
+        required: true
+        selector:
+          entity:
+            domain:
+              - number
+              - input_number
+
+      minutes_entity:
+        name: Minutes entity
+        required: true
+        selector:
+          entity:
+            domain:
+              - number
+              - input_number
+
+      live_speed_entity:
+        name: Live speed sensor
+        required: true
+        selector:
+          entity:
+            domain: sensor
+
+      current_mode_entity:
+        name: Current mode sensor
+        required: false
+        selector:
+          entity:
+            domain: sensor
+
+      previous_mode_entity:
+        name: Previous mode helper
+        required: false
+        selector:
+          entity:
+            domain: input_select
+
+      previous_speed_entity:
+        name: Previous speed helper
+        required: false
+        selector:
+          entity:
+            domain: input_select
+
+      timer_speed_select:
+        name: Timer speed select
+        required: true
+        selector:
+          entity:
+            domain: select
+
+      start_timer_button:
+        name: Start timer button
+        required: true
+        selector:
+          entity:
+            domain: button
+
+      safety_hours_entity:
+        name: QuietCool safety timer hours entity
+        required: false
+        selector:
+          entity:
+            domain: number
+
+      safety_minutes_entity:
+        name: QuietCool safety timer minutes entity
+        required: false
+        selector:
+          entity:
+            domain: number
+
+      smart_button:
+        name: Smart mode button
+        required: false
+        selector:
+          entity:
+            domain: button
+
+      off_button:
+        name: Off button
+        required: true
+        selector:
+          entity:
+            domain: button
+
+      finish_action:
+        name: Finish action
+        required: true
+        selector:
+          select:
+            options:
+              - Smart
+              - "Off"
+
+      fallback_speed:
+        name: Fallback speed
+        required: false
+        default: LOW
+        selector:
+          select:
+            options:
+              - LOW
+              - MED
+              - HIGH
+
+      timer_entity:
+        name: Optional HA timer entity
+        required: false
+        selector:
+          entity:
+            domain: timer
+
+      status_entity:
+        name: Status helper
+        required: false
+        selector:
+          entity:
+            domain: input_text
+
+      finish_action_entity:
+        name: Optional finish action display entity
+        required: false
+
+    sequence:
+      - variables:
+          raw_speed: "{{ states(live_speed_entity) }}"
+          current_mode_raw: >-
+            {{ states(current_mode_entity)
+               if current_mode_entity is defined and current_mode_entity | string | length > 0
+               else 'Run' }}
+          normalized_previous_mode: >-
+            {% if current_mode_raw == 'Timer'
+                  and previous_mode_entity is defined
+                  and previous_mode_entity | string | length > 0
+                  and states(previous_mode_entity) in ['Off', 'Smart', 'Run'] %}
+              {{ states(previous_mode_entity) }}
+            {% elif current_mode_raw == 'TH' %}
+              Smart
+            {% elif current_mode_raw == 'Run' %}
+              Run
+            {% elif current_mode_raw == 'Idle' %}
+              Off
+            {% else %}
+              Run
+            {% endif %}
+          normalized_previous_speed: >-
+            {% if raw_speed in ['LOW', 'MED', 'MEDIUM', 'HIGH'] %}
+              {% if raw_speed == 'MEDIUM' %}
+                MED
+              {% else %}
+                {{ raw_speed }}
+              {% endif %}
+            {% elif fallback_speed | default('LOW') in ['MED', 'MEDIUM'] %}
+              MED
+            {% elif fallback_speed | default('LOW') in ['LOW', 'HIGH'] %}
+              {{ fallback_speed | default('LOW') }}
+            {% else %}
+              LOW
+            {% endif %}
+          timer_speed: >
+            {% if raw_speed in ['LOW', 'MED', 'MEDIUM', 'HIGH'] %}
+              {% if raw_speed == 'MEDIUM' %}
+                MED
+              {% else %}
+                {{ raw_speed }}
+              {% endif %}
+            {% elif fallback_speed | default('LOW') in ['MED', 'MEDIUM'] %}
+              MED
+            {% elif fallback_speed | default('LOW') in ['LOW', 'HIGH'] %}
+              {{ fallback_speed | default('LOW') }}
+            {% else %}
+              LOW
+            {% endif %}
+          timer_speed_options: "{{ state_attr(timer_speed_select, 'options') or [] }}"
+          timer_speed_select_option: >-
+            {% set desired = timer_speed | trim %}
+            {% if desired == 'MED' and 'MED' in timer_speed_options %}
+              MED
+            {% elif desired == 'MED' and 'MEDIUM' in timer_speed_options %}
+              MEDIUM
+            {% elif desired in timer_speed_options %}
+              {{ desired }}
+            {% else %}
+              LOW
+            {% endif %}
+          requested_total_minutes: "{{ (states(hours_entity) | int(0) * 60) + (states(minutes_entity) | int(0)) }}"
+          total_minutes: "{{ [720, [1, requested_total_minutes | int(0)] | max] | min }}"
+          hours: "{{ (total_minutes | int(0) // 60) | int }}"
+          minutes: "{{ (total_minutes | int(0) % 60) | int }}"
+          total_seconds: "{{ (total_minutes | int(0)) * 60 }}"
+          duration: "{{ '%02d:%02d:00' | format(total_minutes | int(0) // 60, total_minutes | int(0) % 60) }}"
+          safety_hours: >-
+            {% set rounded_hours = ((total_minutes | int(0) + 59) // 60) %}
+            {{ [12, [1, rounded_hours] | max] | min }}
+          has_timer_entity: "{{ timer_entity is defined and timer_entity | string | length > 0 }}"
+          has_safety_hours_entity: "{{ safety_hours_entity is defined and safety_hours_entity | string | length > 0 }}"
+          has_safety_minutes_entity: "{{ safety_minutes_entity is defined and safety_minutes_entity | string | length > 0 }}"
+          has_previous_mode_entity: "{{ previous_mode_entity is defined and previous_mode_entity | string | length > 0 }}"
+          has_previous_speed_entity: "{{ previous_speed_entity is defined and previous_speed_entity | string | length > 0 }}"
+          has_current_mode_entity: "{{ current_mode_entity is defined and current_mode_entity | string | length > 0 }}"
+
+      - condition: template
+        value_template: "{{ total_seconds | int > 0 }}"
+      - if:
+          - condition: template
+            value_template: "{{ has_previous_mode_entity }}"
+        then:
+          - service: input_select.select_option
+            target:
+              entity_id: "{{ previous_mode_entity }}"
+            data:
+              option: "{{ normalized_previous_mode | trim }}"
+      - if:
+          - condition: template
+            value_template: "{{ has_previous_speed_entity }}"
+        then:
+          - service: input_select.select_option
+            target:
+              entity_id: "{{ previous_speed_entity }}"
+            data:
+              option: "{{ normalized_previous_speed | trim }}"
+
+      - if:
+          - condition: template
+            value_template: "{{ finish_action_entity is defined and finish_action_entity | string | length > 0 }}"
+        then:
+          - service: input_select.select_option
+            target:
+              entity_id: "{{ finish_action_entity }}"
+            data:
+              option: "{{ finish_action }}"
+
+      - service: script.quietcool_set_command_status
+        data:
+          status_entity: "{{ status_entity | default('', true) }}"
+          status: "Sending Timer"
+
+      # Start optional HA timer helper before ESPHome writes so the frontend countdown
+      # is not blocked by a missing/unavailable device-side setting entity.
+      - if:
+          - condition: template
+            value_template: "{{ has_timer_entity }}"
+        then:
+          - service: timer.start
+            target:
+              entity_id: "{{ timer_entity }}"
+            data:
+              duration: "{{ duration }}"
+
+      # Copy current live speed into QuietCool's timer-speed setting.
+      - service: select.select_option
+        continue_on_error: true
+        target:
+          entity_id: "{{ timer_speed_select }}"
+        data:
+          option: "{{ timer_speed_select_option | trim }}"
+
+      - delay:
+          milliseconds: 500
+
+      - if:
+          - condition: template
+            value_template: "{{ has_safety_hours_entity }}"
+        then:
+          - service: number.set_value
+            continue_on_error: true
+            target:
+              entity_id: "{{ safety_hours_entity }}"
+            data:
+              value: "{{ safety_hours | int }}"
+
+      - if:
+          - condition: template
+            value_template: "{{ has_safety_minutes_entity }}"
+        then:
+          - service: number.set_value
+            continue_on_error: true
+            target:
+              entity_id: "{{ safety_minutes_entity }}"
+            data:
+              value: 0
+
+      - delay:
+          milliseconds: 500
+
+      # Start the QuietCool built-in hourly safety timer.
+      - service: script.quietcool_press_mode_button_confirmed
+        data:
+          button_entity: "{{ start_timer_button }}"
+          mode_entity: "{{ current_mode_entity | default('', true) }}"
+          expected_mode: Timer
+          status_entity: "{{ status_entity | default('', true) }}"
+          command_label: Timer
+
+      # Timer helpers finish through timer.finished automations so attic and whole-house
+      # countdowns can complete independently. If no helper was supplied, fall back to
+      # this script's delay.
+      - if:
+          - condition: template
+            value_template: "{{ not has_timer_entity }}"
+        then:
+          - delay:
+              seconds: "{{ total_seconds | int }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ finish_action == 'Smart' and smart_button is defined and smart_button | string | length > 0 }}"
+                sequence:
+                  - service: button.press
+                    target:
+                      entity_id: "{{ smart_button }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ finish_action == 'Off' }}"
+                sequence:
+                  - service: button.press
+                    target:
+                      entity_id: "{{ off_button }}"

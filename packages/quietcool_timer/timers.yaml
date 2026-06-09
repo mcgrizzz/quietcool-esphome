@@ -1,0 +1,7 @@
+timer:
+  quietcool_attic_fan_timer:
+    name: QuietCool Attic Fan Timer
+    restore: true
+  quietcool_whole_house_fan_timer:
+    name: QuietCool Whole House Fan Timer
+    restore: true

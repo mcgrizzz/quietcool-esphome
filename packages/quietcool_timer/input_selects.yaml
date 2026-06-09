@@ -1,0 +1,40 @@
+input_select:
+  quietcool_timer_finish_action:
+    name: QuietCool Timer Finish Action
+    options:
+      - Smart
+      - "Off"
+    initial: Smart
+    icon: mdi:timer-check-outline
+  quietcool_attic_fan_timer_previous_mode:
+    name: QuietCool Attic Fan Timer Previous Mode
+    options:
+      - "Off"
+      - Smart
+      - Run
+    initial: "Off"
+    icon: mdi:history
+  quietcool_attic_fan_timer_previous_speed:
+    name: QuietCool Attic Fan Timer Previous Speed
+    options:
+      - LOW
+      - MED
+      - HIGH
+    initial: LOW
+    icon: mdi:fan
+  quietcool_whole_house_fan_timer_previous_mode:
+    name: QuietCool Whole House Fan Timer Previous Mode
+    options:
+      - "Off"
+      - Smart
+      - Run
+    initial: "Off"
+    icon: mdi:history
+  quietcool_whole_house_fan_timer_previous_speed:
+    name: QuietCool Whole House Fan Timer Previous Speed
+    options:
+      - LOW
+      - MED
+      - HIGH
+    initial: LOW
+    icon: mdi:fan

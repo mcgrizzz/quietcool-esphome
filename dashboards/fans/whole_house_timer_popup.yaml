@@ -1,0 +1,261 @@
+############################################################
+# WHOLE-HOUSE TIMER POPUP
+############################################################
+type: custom:bubble-card
+card_type: pop-up
+hash: '#quietcool-whole-house-timer'
+name: Start Whole-House Timer
+icon: mdi:timer-cog-outline
+cards:
+  - type: custom:button-card
+    name: Duration
+    icon: mdi:timer-outline
+    show_state: false
+    show_label: true
+    label: >
+      [[[
+        const h = parseInt(states['input_number.quietcool_whole_house_fan_timer_hours']?.state || '0', 10);
+        const m = parseInt(states['input_number.quietcool_whole_house_fan_timer_minutes']?.state || '0', 10);
+        const total = Math.max(1, (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m));
+        const hours = Math.floor(total / 60);
+        const minutes = total % 60;
+        return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+      ]]]
+    styles:
+      card:
+        - height: 78px
+        - border-radius: 20px
+        - padding: 14px
+        - background: rgba(0, 188, 212, 0.12)
+      grid:
+        - grid-template-areas: '"i n" "i l"'
+        - grid-template-columns: 48px 1fr
+        - grid-template-rows: min-content min-content
+      icon:
+        - width: 30px
+        - color: var(--primary-color)
+      name:
+        - justify-self: start
+        - font-size: 14px
+        - opacity: 0.75
+      label:
+        - justify-self: start
+        - font-size: 24px
+        - font-weight: 800
+
+  - type: grid
+    columns: 4
+    square: false
+    cards:
+      - type: custom:button-card
+        name: -1h
+        icon: mdi:minus
+        tap_action:
+          action: call-service
+          service: script.quietcool_adjust_timer_duration
+          service_data:
+            delta_minutes: -60
+            hours_entity: input_number.quietcool_whole_house_fan_timer_hours
+            minutes_entity: input_number.quietcool_whole_house_fan_timer_minutes
+        styles:
+          card:
+            - height: 54px
+            - border-radius: 14px
+          icon:
+            - width: 20px
+          name:
+            - font-weight: 700
+      - type: custom:button-card
+        name: -15m
+        icon: mdi:minus
+        tap_action:
+          action: call-service
+          service: script.quietcool_adjust_timer_duration
+          service_data:
+            delta_minutes: -15
+            hours_entity: input_number.quietcool_whole_house_fan_timer_hours
+            minutes_entity: input_number.quietcool_whole_house_fan_timer_minutes
+        styles:
+          card:
+            - height: 54px
+            - border-radius: 14px
+          icon:
+            - width: 20px
+          name:
+            - font-weight: 700
+      - type: custom:button-card
+        name: +15m
+        icon: mdi:plus
+        tap_action:
+          action: call-service
+          service: script.quietcool_adjust_timer_duration
+          service_data:
+            delta_minutes: 15
+            hours_entity: input_number.quietcool_whole_house_fan_timer_hours
+            minutes_entity: input_number.quietcool_whole_house_fan_timer_minutes
+        styles:
+          card:
+            - height: 54px
+            - border-radius: 14px
+          icon:
+            - width: 20px
+          name:
+            - font-weight: 700
+      - type: custom:button-card
+        name: +1h
+        icon: mdi:plus
+        tap_action:
+          action: call-service
+          service: script.quietcool_adjust_timer_duration
+          service_data:
+            delta_minutes: 60
+            hours_entity: input_number.quietcool_whole_house_fan_timer_hours
+            minutes_entity: input_number.quietcool_whole_house_fan_timer_minutes
+        styles:
+          card:
+            - height: 54px
+            - border-radius: 14px
+          icon:
+            - width: 20px
+          name:
+            - font-weight: 700
+
+  - type: grid
+    columns: 4
+    square: false
+    cards:
+      - type: custom:button-card
+        name: 30m
+        icon: mdi:timer-outline
+        tap_action:
+          action: call-service
+          service: script.quietcool_set_timer_duration
+          service_data:
+            total_minutes: 30
+            hours_entity: input_number.quietcool_whole_house_fan_timer_hours
+            minutes_entity: input_number.quietcool_whole_house_fan_timer_minutes
+        styles:
+          card:
+            - height: 54px
+            - border-radius: 14px
+          icon:
+            - width: 20px
+          name:
+            - font-weight: 700
+      - type: custom:button-card
+        name: 1h
+        icon: mdi:timer-outline
+        tap_action:
+          action: call-service
+          service: script.quietcool_set_timer_duration
+          service_data:
+            total_minutes: 60
+            hours_entity: input_number.quietcool_whole_house_fan_timer_hours
+            minutes_entity: input_number.quietcool_whole_house_fan_timer_minutes
+        styles:
+          card:
+            - height: 54px
+            - border-radius: 14px
+          icon:
+            - width: 20px
+          name:
+            - font-weight: 700
+      - type: custom:button-card
+        name: 2h
+        icon: mdi:timer-outline
+        tap_action:
+          action: call-service
+          service: script.quietcool_set_timer_duration
+          service_data:
+            total_minutes: 120
+            hours_entity: input_number.quietcool_whole_house_fan_timer_hours
+            minutes_entity: input_number.quietcool_whole_house_fan_timer_minutes
+        styles:
+          card:
+            - height: 54px
+            - border-radius: 14px
+          icon:
+            - width: 20px
+          name:
+            - font-weight: 700
+      - type: custom:button-card
+        name: 4h
+        icon: mdi:timer-outline
+        tap_action:
+          action: call-service
+          service: script.quietcool_set_timer_duration
+          service_data:
+            total_minutes: 240
+            hours_entity: input_number.quietcool_whole_house_fan_timer_hours
+            minutes_entity: input_number.quietcool_whole_house_fan_timer_minutes
+        styles:
+          card:
+            - height: 54px
+            - border-radius: 14px
+          icon:
+            - width: 20px
+          name:
+            - font-weight: 700
+
+  - type: custom:button-card
+    name: Start → Off
+    icon: mdi:timer-off-outline
+    show_label: true
+    label: >
+      [[[
+        const h = parseFloat(states['input_number.quietcool_whole_house_fan_timer_hours']?.state);
+        const m = parseFloat(states['input_number.quietcool_whole_house_fan_timer_minutes']?.state);
+        const speedRaw = states['sensor.whole_house_fan_live_speed']?.state || 'LOW';
+        const speed =
+          speedRaw === 'CLOSE' ? 'Off' :
+          speedRaw === 'LOW' ? 'Low' :
+          speedRaw === 'MED' ? 'Medium' :
+          speedRaw === 'MEDIUM' ? 'Medium' :
+          speedRaw === 'HIGH' ? 'High' :
+          speedRaw;
+
+        const hText = isNaN(h) ? '—h' : h.toFixed(0) + 'h';
+        const mText = isNaN(m) ? '—m' : m.toFixed(0) + 'm';
+
+        return `${hText} ${mText} · ${speed}`;
+      ]]]
+    tap_action:
+      action: custom
+      custom: |
+        [[[
+          const status = states['input_text.quietcool_whole_house_fan_command_status']?.state || 'Idle';
+          const pending = status.startsWith('Sending') || status.startsWith('Retry');
+          if (pending) return;
+          hass.callService('script', 'quietcool_start_timed_run', {
+            hours_entity: 'input_number.quietcool_whole_house_fan_timer_hours',
+            minutes_entity: 'input_number.quietcool_whole_house_fan_timer_minutes',
+            safety_hours_entity: 'number.whole_house_fan_timer_hours',
+            safety_minutes_entity: 'number.whole_house_fan_timer_minutes',
+            live_speed_entity: 'sensor.whole_house_fan_live_speed',
+            current_mode_entity: 'sensor.whole_house_fan_mode',
+            previous_mode_entity: 'input_select.quietcool_whole_house_fan_timer_previous_mode',
+            previous_speed_entity: 'input_select.quietcool_whole_house_fan_timer_previous_speed',
+            timer_speed_select: 'select.whole_house_fan_quietcool_timer_speed',
+            start_timer_button: 'button.whole_house_fan_start_quietcool_timer',
+            off_button: 'button.whole_house_fan_stop_quietcool_fan',
+            finish_action: 'Off',
+            fallback_speed: 'LOW',
+            timer_entity: 'timer.quietcool_whole_house_fan_timer',
+            status_entity: 'input_text.quietcool_whole_house_fan_command_status'
+          });
+          const url = window.location.href.split('#')[0];
+          window.history.replaceState(null, '', url);
+          window.dispatchEvent(new CustomEvent('location-changed'));
+        ]]]
+    styles:
+      card:
+        - height: 86px
+        - border-radius: 20px
+      icon:
+        - width: 32px
+      name:
+        - font-weight: 800
+        - font-size: 17px
+      label:
+        - font-size: 13px
+        - opacity: 0.82

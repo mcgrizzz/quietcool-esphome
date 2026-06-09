@@ -1,0 +1,68 @@
+############################################################
+# ADVANCED POPUP
+############################################################
+type: custom:bubble-card
+card_type: pop-up
+hash: '#quietcool-advanced'
+name: QuietCool Advanced
+icon: mdi:tune
+cards:
+  - type: entities
+    title: Debug Controls
+    show_header_toggle: false
+    entities:
+      - entity: switch.attic_exhaust_fan_quietcool_esp_ble_connection
+        name: ESP BLE Connection
+      - entity: select.attic_exhaust_fan_quietcool_mode
+        name: Raw Mode Select
+      - entity: sensor.attic_exhaust_fan_pairing_mode
+        name: Pairing Mode
+      - entity: text.attic_exhaust_fan_raw_quietcool_command
+        name: Raw Command
+      - entity: button.attic_exhaust_fan_send_raw_quietcool_command
+        name: Send Raw Command
+
+  - type: entities
+    title: Whole-House Debug Controls
+    show_header_toggle: false
+    entities:
+      - entity: switch.whole_house_fan_quietcool_esp_ble_connection
+        name: ESP BLE Connection
+      - entity: select.whole_house_fan_quietcool_mode
+        name: Raw Mode Select
+      - entity: sensor.whole_house_fan_pairing_mode
+        name: Pairing Mode
+      - entity: text.whole_house_fan_raw_quietcool_command
+        name: Raw Command
+      - entity: button.whole_house_fan_send_raw_quietcool_command
+        name: Send Raw Command
+
+  - type: entities
+    title: Polling
+    show_header_toggle: false
+    entities:
+      - entity: button.attic_exhaust_fan_poll_quietcool_work_state_now
+        name: Poll Live State
+      - entity: button.attic_exhaust_fan_poll_quietcool_parameters_now
+        name: Poll Parameters
+      - entity: button.attic_exhaust_fan_poll_quietcool_firmware_info_now
+        name: Poll Firmware
+      - entity: button.attic_exhaust_fan_poll_quietcool_fan_info_now
+        name: Poll Fan Info
+      - entity: button.attic_exhaust_fan_poll_quietcool_profiles_now
+        name: Poll Profiles
+
+  - type: entities
+    title: Threshold Readbacks
+    show_header_toggle: false
+    entities:
+      - entity: sensor.attic_exhaust_fan_high_temperature_threshold
+        name: High Temp
+      - entity: sensor.attic_exhaust_fan_medium_temperature_threshold
+        name: Medium Temp
+      - entity: sensor.attic_exhaust_fan_low_temperature_threshold
+        name: Low Temp
+      - entity: sensor.attic_exhaust_fan_humidity_turn_on_threshold
+        name: Humidity Turn On
+      - entity: sensor.attic_exhaust_fan_humidity_shutoff_threshold
+        name: Humidity Shutoff
