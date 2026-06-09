@@ -48,7 +48,7 @@ globals:
     type: std::string
     initial_value: '"LOW"'
     restore_value: no
-  # A:2.L is timer speed only.
+  # A:2.L is timer speed only. QuietCool's medium command value is MED.
   - id: quietcool_timer_range
     type: std::string
     initial_value: '"LOW"'
@@ -149,7 +149,7 @@ script:
 # Fan Component Configuration
 # ----------------------------------------
 # Template-based fan platform that provides:
-# - Three speed levels (LOW/MEDIUM/HIGH) using A:18 live/manual range writes
+# - Three speed levels (LOW/MED/HIGH) using A:18 live/manual range writes
 # - Manual continuous Run mode operation
 # - State restoration after power loss
 fan:
@@ -166,7 +166,7 @@ fan:
           if (x == 3) {
             id(quietcool_selected_range) = "HIGH";
           } else if (x == 2) {
-            id(quietcool_selected_range) = "MEDIUM";
+            id(quietcool_selected_range) = "MED";
           } else {
             id(quietcool_selected_range) = "LOW";
           }
@@ -180,7 +180,7 @@ fan:
           if (id(quietcool_fan).speed == 3) {
             id(quietcool_selected_range) = "HIGH";
           } else if (id(quietcool_fan).speed == 2) {
-            id(quietcool_selected_range) = "MEDIUM";
+            id(quietcool_selected_range) = "MED";
           } else {
             id(quietcool_selected_range) = "LOW";
           }
@@ -251,7 +251,7 @@ select:
     id: quietcool_timer_speed
     options:
       - "LOW"
-      - "MEDIUM"
+      - "MED"
       - "HIGH"
     lambda: |-
       return id(quietcool_timer_range);
@@ -392,7 +392,7 @@ button:
     on_press:
       - script.execute:
           id: set_manual_range
-          speed: "MEDIUM"
+          speed: "MED"
       - script.wait: set_manual_range
       - script.execute:
           id: set_mode
@@ -626,7 +626,7 @@ text_sensor:
                   int fan_speed = 0;
                   if (id(quietcool_selected_range) == "HIGH") {
                     fan_speed = 3;
-                  } else if (id(quietcool_selected_range) == "MEDIUM") {
+                  } else if (id(quietcool_selected_range) == "MED" || id(quietcool_selected_range) == "MEDIUM") {
                     fan_speed = 2;
                   } else if (id(quietcool_selected_range) == "LOW") {
                     fan_speed = 1;
@@ -659,8 +659,8 @@ text_sensor:
                     if (key == "R") { // Actual live speed/range
                       std::string v = it->value().as<std::string>();
                       id(range).publish_state(v);
-                      if (v == "LOW" || v == "MEDIUM" || v == "HIGH") {
-                        id(quietcool_selected_range) = v;
+                      if (v == "LOW" || v == "MED" || v == "MEDIUM" || v == "HIGH") {
+                        id(quietcool_selected_range) = (v == "MEDIUM") ? "MED" : v;
                       } else {
                         id(quietcool_selected_range) = "";
                       }
@@ -748,9 +748,10 @@ text_sensor:
                     if (key == "L") { // Timer speed only; not live/manual Run speed
                       std::string v = it->value().as<std::string>();
                       id(get_time_range).publish_state(v);
-                      if (v == "LOW" || v == "MEDIUM" || v == "HIGH") {
-                        id(quietcool_timer_range) = v;
-                        id(quietcool_timer_speed).publish_state(v);
+                      if (v == "LOW" || v == "MED" || v == "MEDIUM" || v == "HIGH") {
+                        std::string timer_v = (v == "MEDIUM") ? "MED" : v;
+                        id(quietcool_timer_range) = timer_v;
+                        id(quietcool_timer_speed).publish_state(timer_v);
                       }
                       continue;
                     }
@@ -813,8 +814,8 @@ text_sensor:
                     if (key == "S") { // Acknowledged live/manual range
                       std::string v = it->value().as<std::string>();
                       id(range).publish_state(v);
-                      if (v == "LOW" || v == "MEDIUM" || v == "HIGH") {
-                        id(quietcool_selected_range) = v;
+                      if (v == "LOW" || v == "MED" || v == "MEDIUM" || v == "HIGH") {
+                        id(quietcool_selected_range) = (v == "MEDIUM") ? "MED" : v;
                       }
                       publish_fan_from_cached();
                       continue;
