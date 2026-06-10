@@ -1,0 +1,292 @@
+template:
+  - sensor:
+      - name: Indoor Bridgewater Dragino Dew Point
+        unique_id: indoor_bridgewater_dragino_dew_point
+        device_class: temperature
+        unit_of_measurement: "°F"
+        availability: >-
+          {{ states('sensor.indoor_bridgewater_dragino_temperature') | float(none) is not none
+             and states('sensor.indoor_bridgewater_dragino_humidity') | float(none) is not none
+             and states('sensor.indoor_bridgewater_dragino_humidity') | float > 0 }}
+        state: >-
+          {% set temp_f = states('sensor.indoor_bridgewater_dragino_temperature') | float %}
+          {% set rh = states('sensor.indoor_bridgewater_dragino_humidity') | float %}
+          {% set temp_c = (temp_f - 32) * 5 / 9 %}
+          {% set gamma = log(rh / 100) + (17.625 * temp_c) / (243.04 + temp_c) %}
+          {{ (((243.04 * gamma) / (17.625 - gamma)) * 9 / 5 + 32) | round(1) }}
+
+      - name: Bridgewater Outdoor Dragino Dew Point
+        unique_id: bridgewater_outdoor_dragino_dew_point
+        device_class: temperature
+        unit_of_measurement: "°F"
+        availability: >-
+          {{ states('sensor.bridgewater_outdoor_dragino_temperature') | float(none) is not none
+             and states('sensor.bridgewater_outdoor_dragino_humidity') | float(none) is not none
+             and states('sensor.bridgewater_outdoor_dragino_humidity') | float > 0 }}
+        state: >-
+          {% set temp_f = states('sensor.bridgewater_outdoor_dragino_temperature') | float %}
+          {% set rh = states('sensor.bridgewater_outdoor_dragino_humidity') | float %}
+          {% set temp_c = (temp_f - 32) * 5 / 9 %}
+          {% set gamma = log(rh / 100) + (17.625 * temp_c) / (243.04 + temp_c) %}
+          {{ (((243.04 * gamma) / (17.625 - gamma)) * 9 / 5 + 32) | round(1) }}
+
+      - name: Indoor Bridgewater Dragino Age Minutes
+        unique_id: indoor_bridgewater_dragino_age_minutes
+        unit_of_measurement: min
+        icon: mdi:clock-outline
+        availability: >-
+          {{ as_timestamp(states('sensor.indoor_bridgewater_dragino_last_seen'), none) is not none }}
+        state: >-
+          {% set seen = as_timestamp(states('sensor.indoor_bridgewater_dragino_last_seen'), none) %}
+          {{ ((as_timestamp(now()) - seen) / 60) | round(0, 'floor') }}
+        attributes:
+          freshness: >-
+            {% set seen = as_timestamp(states('sensor.indoor_bridgewater_dragino_last_seen'), none) %}
+            {% if seen is none %}
+              stale
+            {% else %}
+              {% set age = ((as_timestamp(now()) - seen) / 60) %}
+              {{ 'fresh' if age <= 15 else 'caution' if age <= 60 else 'stale' }}
+            {% endif %}
+          age_text: >-
+            {% set seen = as_timestamp(states('sensor.indoor_bridgewater_dragino_last_seen'), none) %}
+            {% if seen is none %}
+              Updated unknown
+            {% else %}
+              {% set age = ((as_timestamp(now()) - seen) / 60) | round(0, 'floor') | int %}
+              {% if age < 1 %}
+                Updated now
+              {% elif age < 60 %}
+                Updated {{ age }}m ago
+              {% else %}
+                Updated {{ age // 60 }}h {{ age % 60 }}m ago
+              {% endif %}
+            {% endif %}
+
+      - name: Bridgewater Outdoor Dragino Age Minutes
+        unique_id: bridgewater_outdoor_dragino_age_minutes
+        unit_of_measurement: min
+        icon: mdi:clock-outline
+        availability: >-
+          {{ as_timestamp(states('sensor.bridgewater_outdoor_dragino_last_seen'), none) is not none }}
+        state: >-
+          {% set seen = as_timestamp(states('sensor.bridgewater_outdoor_dragino_last_seen'), none) %}
+          {{ ((as_timestamp(now()) - seen) / 60) | round(0, 'floor') }}
+        attributes:
+          freshness: >-
+            {% set seen = as_timestamp(states('sensor.bridgewater_outdoor_dragino_last_seen'), none) %}
+            {% if seen is none %}
+              stale
+            {% else %}
+              {% set age = ((as_timestamp(now()) - seen) / 60) %}
+              {{ 'fresh' if age <= 15 else 'caution' if age <= 60 else 'stale' }}
+            {% endif %}
+          age_text: >-
+            {% set seen = as_timestamp(states('sensor.bridgewater_outdoor_dragino_last_seen'), none) %}
+            {% if seen is none %}
+              Updated unknown
+            {% else %}
+              {% set age = ((as_timestamp(now()) - seen) / 60) | round(0, 'floor') | int %}
+              {% if age < 1 %}
+                Updated now
+              {% elif age < 60 %}
+                Updated {{ age }}m ago
+              {% else %}
+                Updated {{ age // 60 }}h {{ age % 60 }}m ago
+              {% endif %}
+            {% endif %}
+
+      - name: Whole House Fan AC Status
+        unique_id: whole_house_fan_ac_status
+        icon: mdi:air-conditioner
+        state: >-
+          {% set ns = namespace(total=0, cooling=false, idle=false, off=false, unknown=false) %}
+          {% for climate in states.climate %}
+            {% set ns.total = ns.total + 1 %}
+            {% set action = state_attr(climate.entity_id, 'hvac_action') %}
+            {% if action == 'cooling' %}
+              {% set ns.cooling = true %}
+            {% elif climate.state in ['unknown', 'unavailable'] %}
+              {% set ns.unknown = true %}
+            {% elif climate.state == 'off' %}
+              {% set ns.off = true %}
+            {% elif climate.state in ['cool', 'auto', 'heat', 'fan_only'] or action == 'idle' %}
+              {% set ns.idle = true %}
+            {% endif %}
+          {% endfor %}
+          {% if ns.cooling %}
+            Cooling
+          {% elif ns.idle %}
+            Idle
+          {% elif ns.off and not ns.unknown %}
+            Off
+          {% elif ns.total == 0 or ns.unknown %}
+            Unknown
+          {% else %}
+            Off
+          {% endif %}
+
+      - name: Whole House Fan Temperature Delta
+        unique_id: whole_house_fan_temperature_delta
+        unit_of_measurement: "°F"
+        icon: mdi:thermometer-chevron-down
+        availability: >-
+          {{ states('sensor.indoor_bridgewater_dragino_temperature') | float(none) is not none
+             and states('sensor.bridgewater_outdoor_dragino_temperature') | float(none) is not none }}
+        state: >-
+          {% set indoor = states('sensor.indoor_bridgewater_dragino_temperature') | float %}
+          {% set outdoor = states('sensor.bridgewater_outdoor_dragino_temperature') | float %}
+          {{ (indoor - outdoor) | round(1) }}
+        attributes:
+          summary: >-
+            {% set delta = this.state | float(none) %}
+            {% if delta is none %}
+              Temp unknown
+            {% elif delta > 0 %}
+              {{ delta | abs | round(1) }}°F cooler
+            {% elif delta < 0 %}
+              {{ delta | abs | round(1) }}°F warmer
+            {% else %}
+              Same temp
+            {% endif %}
+
+      - name: Whole House Fan Dew Point Delta
+        unique_id: whole_house_fan_dew_point_delta
+        unit_of_measurement: "°F"
+        icon: mdi:water-thermometer-outline
+        availability: >-
+          {{ states('sensor.indoor_bridgewater_dragino_dew_point') | float(none) is not none
+             and states('sensor.bridgewater_outdoor_dragino_dew_point') | float(none) is not none }}
+        state: >-
+          {% set indoor = states('sensor.indoor_bridgewater_dragino_dew_point') | float %}
+          {% set outdoor = states('sensor.bridgewater_outdoor_dragino_dew_point') | float %}
+          {{ (outdoor - indoor) | round(1) }}
+        attributes:
+          moisture_summary: >-
+            {% set delta = this.state | float(none) %}
+            {% if delta is none %}
+              Moisture data unavailable
+            {% elif delta <= -4 %}
+              Drier air
+            {% elif delta <= -1 %}
+              Slightly drier
+            {% elif delta >= 4 %}
+              More moisture
+            {% elif delta >= 1 %}
+              Slightly wetter
+            {% else %}
+              Similar moisture
+            {% endif %}
+
+      - name: Whole House Fan Comfort Summary
+        unique_id: whole_house_fan_comfort_summary
+        icon: mdi:home-thermometer
+        state: >-
+          {{ state_attr('sensor.whole_house_fan_temperature_delta', 'summary') | default('Temp unknown', true) }}
+        attributes:
+          moisture_summary: >-
+            {{ state_attr('sensor.whole_house_fan_dew_point_delta', 'moisture_summary') | default('Moisture data unavailable', true) }}
+
+      - name: Whole House Fan Conditions Headline
+        unique_id: whole_house_fan_conditions_headline
+        icon: mdi:fan-alert
+        state: >-
+          {% set ac = states('sensor.whole_house_fan_ac_status') %}
+          {% set indoor_age = states('sensor.indoor_bridgewater_dragino_age_minutes') | float(none) %}
+          {% set outdoor_age = states('sensor.bridgewater_outdoor_dragino_age_minutes') | float(none) %}
+          {% set temp_delta = states('sensor.whole_house_fan_temperature_delta') | float(none) %}
+          {% set dew_delta = states('sensor.whole_house_fan_dew_point_delta') | float(none) %}
+          {% if ac == 'Cooling' %}
+            AC is cooling
+          {% elif indoor_age is none or outdoor_age is none or indoor_age > 15 or outdoor_age > 15 %}
+            Conditions may be stale
+          {% elif temp_delta is none or dew_delta is none %}
+            Conditions unknown
+          {% elif temp_delta <= 0 %}
+            Not ideal
+          {% elif dew_delta >= 4 %}
+            Outdoor air is humid
+          {% elif temp_delta < 2 %}
+            Decent time to run
+          {% else %}
+            Good time to run
+          {% endif %}
+        attributes:
+          severity: >-
+            {% set ac = states('sensor.whole_house_fan_ac_status') %}
+            {% set indoor_age = states('sensor.indoor_bridgewater_dragino_age_minutes') | float(none) %}
+            {% set outdoor_age = states('sensor.bridgewater_outdoor_dragino_age_minutes') | float(none) %}
+            {% set temp_delta = states('sensor.whole_house_fan_temperature_delta') | float(none) %}
+            {% set dew_delta = states('sensor.whole_house_fan_dew_point_delta') | float(none) %}
+            {% if ac == 'Cooling' %}
+              bad
+            {% elif indoor_age is none or outdoor_age is none or indoor_age > 60 or outdoor_age > 60 %}
+              unknown
+            {% elif indoor_age > 15 or outdoor_age > 15 %}
+              caution
+            {% elif temp_delta is none or dew_delta is none %}
+              unknown
+            {% elif temp_delta <= 0 %}
+              bad
+            {% elif dew_delta >= 4 or temp_delta < 2 or dew_delta >= 1 %}
+              caution
+            {% else %}
+              good
+            {% endif %}
+          message: >-
+            {% macro age_text(age) -%}
+              {%- if age is none -%}
+                unknown
+              {%- elif age < 1 -%}
+                just now
+              {%- elif age < 60 -%}
+                {{ age | int }}m ago
+              {%- else -%}
+                {{ (age // 60) | int }}h {{ (age % 60) | int }}m ago
+              {%- endif -%}
+            {%- endmacro %}
+            {% set ac = states('sensor.whole_house_fan_ac_status') %}
+            {% set indoor_age = states('sensor.indoor_bridgewater_dragino_age_minutes') | float(none) %}
+            {% set outdoor_age = states('sensor.bridgewater_outdoor_dragino_age_minutes') | float(none) %}
+            {% set temp_delta = states('sensor.whole_house_fan_temperature_delta') | float(none) %}
+            {% set dew_delta = states('sensor.whole_house_fan_dew_point_delta') | float(none) %}
+            {% set moisture = state_attr('sensor.whole_house_fan_dew_point_delta', 'moisture_summary') %}
+            {% if ac == 'Cooling' %}
+              Turn off AC before starting the house fan.
+            {% elif indoor_age is none or outdoor_age is none %}
+              Sensor freshness is unavailable.
+            {% elif indoor_age > 15 or outdoor_age > 15 %}
+              {% if indoor_age >= outdoor_age %}
+                Indoor sensor last updated {{ age_text(indoor_age) }}.
+              {% else %}
+                Outdoor sensor last updated {{ age_text(outdoor_age) }}.
+              {% endif %}
+            {% elif temp_delta is none or dew_delta is none %}
+              Temperature or moisture data is unavailable.
+            {% elif temp_delta <= 0 %}
+              Outside is warmer than inside.
+            {% elif dew_delta >= 4 %}
+              Outside is cooler, but moisture is high.
+            {% elif temp_delta < 2 %}
+              Outside is only {{ temp_delta | round(1) }}°F cooler, but {{ moisture | lower }}.
+            {% elif dew_delta <= -1 %}
+              Outside is {{ temp_delta | round(1) }}°F cooler and {{ moisture | lower }}.
+            {% elif ac == 'Idle' %}
+              Outside is {{ temp_delta | round(1) }}°F cooler and AC is idle.
+            {% elif ac == 'Unknown' %}
+              Outside is {{ temp_delta | round(1) }}°F cooler; AC state is unavailable.
+            {% else %}
+              Outside is {{ temp_delta | round(1) }}°F cooler and AC is off.
+            {% endif %}
+
+      - name: Whole House Fan Conditions Message
+        unique_id: whole_house_fan_conditions_message
+        icon: mdi:message-text-outline
+        state: >-
+          {{ (state_attr('sensor.whole_house_fan_conditions_headline', 'message') | default('Temperature or moisture data is unavailable.', true)) | trim }}
+
+      - name: Whole House Fan Conditions Severity
+        unique_id: whole_house_fan_conditions_severity
+        icon: mdi:alert-decagram-outline
+        state: >-
+          {{ (state_attr('sensor.whole_house_fan_conditions_headline', 'severity') | default('unknown', true)) | trim }}

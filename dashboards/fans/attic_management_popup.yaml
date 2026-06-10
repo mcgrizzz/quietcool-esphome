@@ -284,6 +284,14 @@ cards:
       label: >
         [[[
           const finish = states['input_select.quietcool_timer_finish_action']?.state || 'Smart';
+          const speedRaw = states['sensor.attic_exhaust_fan_live_speed']?.state || 'LOW';
+          const speed =
+            speedRaw === 'CLOSE' ? 'Off' :
+            speedRaw === 'LOW' ? 'Low' :
+            speedRaw === 'MED' ? 'Medium' :
+            speedRaw === 'MEDIUM' ? 'Medium' :
+            speedRaw === 'HIGH' ? 'High' :
+            speedRaw;
           const timer = states['timer.quietcool_attic_fan_timer'];
 
           const finishesAt = timer?.attributes?.finishes_at;
@@ -301,7 +309,7 @@ cards:
               : `${m}:${String(s).padStart(2, '0')}`;
           }
 
-          return `${remaining} left \u00b7 then ${finish}`;
+          return `Running ${speed} \u00b7 returns to ${finish} in ${remaining}`;
         ]]]
       tap_action:
         action: more-info

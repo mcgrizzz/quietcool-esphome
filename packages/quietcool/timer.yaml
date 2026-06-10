@@ -1,3 +1,76 @@
+input_number:
+  quietcool_whole_house_fan_timer_hours:
+    name: QuietCool Whole House Fan Timer Hours
+    min: 0
+    max: 12
+    step: 1
+    initial: 1
+    mode: box
+    unit_of_measurement: h
+    icon: mdi:timer-outline
+  quietcool_whole_house_fan_timer_minutes:
+    name: QuietCool Whole House Fan Timer Minutes
+    min: 0
+    max: 59
+    step: 1
+    initial: 0
+    mode: box
+    unit_of_measurement: min
+    icon: mdi:timer-outline
+
+input_select:
+  quietcool_timer_finish_action:
+    name: QuietCool Timer Finish Action
+    options:
+      - Smart
+      - "Off"
+    initial: Smart
+    icon: mdi:timer-check-outline
+  quietcool_attic_fan_timer_previous_mode:
+    name: QuietCool Attic Fan Timer Previous Mode
+    options:
+      - "Off"
+      - Smart
+      - Run
+    initial: "Off"
+    icon: mdi:history
+  quietcool_attic_fan_timer_previous_speed:
+    name: QuietCool Attic Fan Timer Previous Speed
+    options:
+      - LOW
+      - MED
+      - HIGH
+    initial: LOW
+    icon: mdi:fan
+  quietcool_whole_house_fan_timer_previous_mode:
+    name: QuietCool Whole House Fan Timer Previous Mode
+    options:
+      - "Off"
+      - Smart
+      - Run
+    initial: "Off"
+    icon: mdi:history
+  quietcool_whole_house_fan_timer_previous_speed:
+    name: QuietCool Whole House Fan Timer Previous Speed
+    options:
+      - LOW
+      - MED
+      - HIGH
+    initial: LOW
+    icon: mdi:fan
+
+input_text:
+  quietcool_attic_fan_command_status:
+    name: QuietCool Attic Fan Command Status
+    max: 120
+    initial: Idle
+    icon: mdi:check-network-outline
+  quietcool_whole_house_fan_command_status:
+    name: QuietCool Whole House Fan Command Status
+    max: 120
+    initial: Idle
+    icon: mdi:check-network-outline
+
 script:
   quietcool_set_command_status:
     alias: QuietCool Set Command Status
@@ -923,9 +996,8 @@ script:
           status_entity: "{{ status_entity | default('', true) }}"
           command_label: Timer
 
-      # Timer helpers finish through timer.finished automations so attic and whole-house
-      # countdowns can complete independently. If no helper was supplied, fall back to
-      # this script's delay.
+      # Timer helpers normally finish through Node-RED flows. If no helper was
+      # supplied, fall back to this script's delay.
       - if:
           - condition: template
             value_template: "{{ not has_timer_entity }}"
@@ -947,3 +1019,11 @@ script:
                   - service: button.press
                     target:
                       entity_id: "{{ off_button }}"
+
+timer:
+  quietcool_attic_fan_timer:
+    name: QuietCool Attic Fan Timer
+    restore: true
+  quietcool_whole_house_fan_timer:
+    name: QuietCool Whole House Fan Timer
+    restore: true

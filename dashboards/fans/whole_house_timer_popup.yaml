@@ -198,7 +198,7 @@ cards:
             - font-weight: 700
 
   - type: custom:button-card
-    name: Start → Off
+    name: Run, then Off
     icon: mdi:timer-off-outline
     show_label: true
     label: >

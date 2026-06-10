@@ -78,50 +78,79 @@ cards:
   # Conditions
   ########################################################
   - type: custom:button-card
-    entity: sensor.bedrooms_temperature
-    triggers_update: all
-    name: Conditions
+    entity: sensor.whole_house_fan_conditions_headline
+    triggers_update:
+      - sensor.whole_house_fan_conditions_headline
+      - sensor.whole_house_fan_conditions_message
+      - sensor.whole_house_fan_conditions_severity
+      - sensor.whole_house_fan_ac_status
+      - sensor.indoor_bridgewater_dragino_temperature
+      - sensor.indoor_bridgewater_dragino_humidity
+      - sensor.indoor_bridgewater_dragino_dew_point
+      - sensor.indoor_bridgewater_dragino_age_minutes
+      - sensor.bridgewater_outdoor_dragino_temperature
+      - sensor.bridgewater_outdoor_dragino_humidity
+      - sensor.bridgewater_outdoor_dragino_dew_point
+      - sensor.bridgewater_outdoor_dragino_age_minutes
+      - sensor.whole_house_fan_comfort_summary
+      - sensor.whole_house_fan_temperature_delta
+      - sensor.whole_house_fan_dew_point_delta
+    name: >
+      [[[
+        return (states['sensor.whole_house_fan_conditions_headline']?.state || 'Conditions unknown').trim();
+      ]]]
     icon: mdi:home-thermometer-outline
+    show_icon: false
     show_state: false
     show_label: true
     custom_fields:
       ac: >
         [[[
-          const climates = Object.values(states).filter((entity) => entity.entity_id?.startsWith('climate.'));
-          const cooling = climates.some((entity) => entity.attributes?.hvac_action === 'cooling');
-          const idle = climates.some((entity) => ['heat', 'cool', 'auto', 'fan_only'].includes(entity.state));
-          return cooling ? 'AC: Cooling' : idle ? 'AC: Idle' : 'AC: Off';
+          return `AC: ${(states['sensor.whole_house_fan_ac_status']?.state || 'Unknown').trim()}`;
+        ]]]
+      inside: >
+        [[[
+          const value = (entityId, digits = 0, suffix = '') => {
+            const raw = states[entityId]?.state;
+            const n = Number(raw);
+            return Number.isFinite(n) ? `${n.toFixed(digits)}${suffix}` : '-';
+          };
+          const age = states['sensor.indoor_bridgewater_dragino_age_minutes'];
+          const freshness = age?.attributes?.freshness || 'stale';
+          const ageText = age?.attributes?.age_text || 'Updated unknown';
+          return `<div class="metric-title">Inside</div>
+            <div class="metric-main">${value('sensor.indoor_bridgewater_dragino_temperature', 1, '\u00b0F')}</div>
+            <div class="metric-sub">${value('sensor.indoor_bridgewater_dragino_humidity', 0, '% RH')} \u00b7 ${value('sensor.indoor_bridgewater_dragino_dew_point', 0, '\u00b0F dew')}</div>
+            <div class="metric-age ${freshness}">${ageText}</div>`;
+        ]]]
+      outside: >
+        [[[
+          const value = (entityId, digits = 0, suffix = '') => {
+            const raw = states[entityId]?.state;
+            const n = Number(raw);
+            return Number.isFinite(n) ? `${n.toFixed(digits)}${suffix}` : '-';
+          };
+          const age = states['sensor.bridgewater_outdoor_dragino_age_minutes'];
+          const freshness = age?.attributes?.freshness || 'stale';
+          const ageText = age?.attributes?.age_text || 'Updated unknown';
+          return `<div class="metric-title">Outside</div>
+            <div class="metric-main">${value('sensor.bridgewater_outdoor_dragino_temperature', 1, '\u00b0F')}</div>
+            <div class="metric-sub">${value('sensor.bridgewater_outdoor_dragino_humidity', 0, '% RH')} \u00b7 ${value('sensor.bridgewater_outdoor_dragino_dew_point', 0, '\u00b0F dew')}</div>
+            <div class="metric-age ${freshness}">${ageText}</div>`;
+        ]]]
+      comfort: >
+        [[[
+          const comfort = states['sensor.whole_house_fan_comfort_summary'];
+          const ac = (states['sensor.whole_house_fan_ac_status']?.state || 'Unknown').trim();
+          const acNote = ['Cooling', 'Unknown'].includes(ac) ? `AC ${ac.toLowerCase()}` : '';
+          return `<div class="metric-title">Why</div>
+            <div class="metric-main">${comfort?.state || 'Temp unknown'}</div>
+            <div class="metric-sub">${comfort?.attributes?.moisture_summary || 'Moisture data unavailable'}</div>
+            <div class="metric-age ${ac === 'Cooling' ? 'stale' : ac === 'Unknown' ? 'caution' : ''}">${acNote}</div>`;
         ]]]
     label: >
       [[[
-        const house = parseFloat(states['sensor.bedrooms_temperature']?.state);
-        const weather = states['weather.forecast_home'];
-        const outside = parseFloat(weather?.attributes?.temperature);
-        const outdoorHumidity = parseFloat(weather?.attributes?.humidity);
-
-        const houseText = isNaN(house) ? '-' : `${house.toFixed(1)}\u00b0F`;
-        const outsideTempText = isNaN(outside) ? '-' : `${outside.toFixed(1)}\u00b0F`;
-        const outsideHumText = isNaN(outdoorHumidity) ? '-' : `${outdoorHumidity.toFixed(0)}%`;
-
-        const climates = Object.values(states).filter((entity) => entity.entity_id?.startsWith('climate.'));
-        const acCooling = climates.some((entity) => entity.attributes?.hvac_action === 'cooling');
-
-        let recommendation = 'Temperature data unavailable - compare conditions before starting.';
-        if (!isNaN(house) && !isNaN(outside) && !isNaN(outdoorHumidity)) {
-          if (acCooling) {
-            recommendation = 'AC is running - consider turning it off before starting the house fan.';
-          } else if (outside > house) {
-            recommendation = 'Outside is warmer than inside - leave fan off.';
-          } else if (outside < house && outdoorHumidity >= 65) {
-            recommendation = 'Outdoor air is cooler, but humidity is high.';
-          } else if (outside < house) {
-            recommendation = 'Good time to run - outside is cooler and AC is idle.';
-          } else {
-            recommendation = 'Indoor and outdoor temperatures are about the same - leave fan off.';
-          }
-        }
-
-        return `House: ${houseText}\nOutside: ${outsideTempText} \u00b7 ${outsideHumText} humidity\n${recommendation}`;
+        return (states['sensor.whole_house_fan_conditions_message']?.state || 'Temperature or moisture data is unavailable.').trim();
       ]]]
     tap_action:
       action: more-info
@@ -129,28 +158,37 @@ cards:
       card:
         - padding: 18px
         - border-radius: 20px
-        - background: rgba(0, 188, 212, 0.12)
+        - background: >
+            [[[
+              const severity = (states['sensor.whole_house_fan_conditions_severity']?.state || 'unknown').trim();
+              if (severity === 'bad') {
+                return 'rgba(244, 67, 54, 0.12)';
+              }
+              if (severity === 'unknown') {
+                return 'rgba(158, 158, 158, 0.13)';
+              }
+              if (severity === 'caution') return 'rgba(255, 152, 0, 0.14)';
+              return 'rgba(0, 188, 212, 0.13)';
+            ]]]
       grid:
-        - grid-template-areas: '"i n ac" "i l l"'
-        - grid-template-columns: 48px 1fr max-content
-        - grid-template-rows: min-content min-content
+        - grid-template-areas: '"n n ac" "l l l" "inside outside comfort"'
+        - grid-template-columns: repeat(3, minmax(0, 1fr))
+        - grid-template-rows: min-content min-content min-content
         - column-gap: 10px
-      icon:
-        - width: 30px
-        - color: var(--primary-color)
+        - row-gap: 12px
       name:
         - justify-self: start
         - align-self: center
-        - font-size: 19px
+        - font-size: 22px
         - font-weight: 800
       label:
         - justify-self: stretch
         - text-align: left
-        - white-space: pre-line
+        - white-space: normal
         - line-height: 1.35
         - font-size: 14px
+        - font-weight: 600
         - opacity: 0.9
-        - margin-top: 8px
       custom_fields:
         ac:
           - justify-self: end
@@ -161,26 +199,102 @@ cards:
           - font-weight: 800
           - background: >
               [[[
-                const climates = Object.values(states).filter((entity) => entity.entity_id?.startsWith('climate.'));
-                const cooling = climates.some((entity) => entity.attributes?.hvac_action === 'cooling');
-                const idle = climates.some((entity) => ['heat', 'cool', 'auto', 'fan_only'].includes(entity.state));
-                return cooling
+                const ac = (states['sensor.whole_house_fan_ac_status']?.state || 'Unknown').trim();
+                return ac === 'Cooling'
                   ? 'rgba(244, 67, 54, 0.18)'
-                  : idle
-                    ? 'rgba(255, 152, 0, 0.18)'
-                    : 'rgba(76, 175, 80, 0.18)';
+                  : ac === 'Unknown'
+                    ? 'rgba(158, 158, 158, 0.18)'
+                    : ac === 'Idle'
+                      ? 'rgba(255, 152, 0, 0.18)'
+                      : 'rgba(76, 175, 80, 0.18)';
               ]]]
           - color: >
               [[[
-                const climates = Object.values(states).filter((entity) => entity.entity_id?.startsWith('climate.'));
-                const cooling = climates.some((entity) => entity.attributes?.hvac_action === 'cooling');
-                const idle = climates.some((entity) => ['heat', 'cool', 'auto', 'fan_only'].includes(entity.state));
-                return cooling
+                const ac = (states['sensor.whole_house_fan_ac_status']?.state || 'Unknown').trim();
+                return ac === 'Cooling'
                   ? 'var(--error-color)'
-                  : idle
-                    ? 'var(--warning-color)'
-                    : 'var(--success-color)';
+                  : ac === 'Unknown'
+                    ? 'var(--secondary-text-color)'
+                    : ac === 'Idle'
+                      ? 'var(--warning-color)'
+                      : 'var(--success-color)';
               ]]]
+        inside:
+          - grid-area: inside
+          - align-self: stretch
+          - justify-self: stretch
+          - text-align: left
+          - border-radius: 14px
+          - padding: 10px
+          - background: var(--ha-card-background)
+          - box-shadow: var(--ha-card-box-shadow)
+          - overflow: hidden
+        outside:
+          - grid-area: outside
+          - align-self: stretch
+          - justify-self: stretch
+          - text-align: left
+          - border-radius: 14px
+          - padding: 10px
+          - background: var(--ha-card-background)
+          - box-shadow: var(--ha-card-box-shadow)
+          - overflow: hidden
+        comfort:
+          - grid-area: comfort
+          - align-self: stretch
+          - justify-self: stretch
+          - text-align: left
+          - border-radius: 14px
+          - padding: 10px
+          - background: var(--ha-card-background)
+          - box-shadow: var(--ha-card-box-shadow)
+          - overflow: hidden
+    extra_styles: |
+      .metric-title {
+        font-size: 12px;
+        font-weight: 700;
+        opacity: 0.7;
+        line-height: 1.2;
+      }
+      .metric-main {
+        margin-top: 4px;
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 1.2;
+        color: var(--primary-text-color);
+      }
+      .metric-sub {
+        margin-top: 4px;
+        font-size: 12px;
+        line-height: 1.25;
+        color: var(--primary-text-color);
+        opacity: 0.86;
+      }
+      .metric-age {
+        margin-top: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.2;
+        opacity: 0.8;
+      }
+      .metric-age.caution {
+        color: var(--warning-color);
+        opacity: 1;
+      }
+      .metric-age.stale {
+        color: var(--error-color);
+        opacity: 1;
+      }
+      @media (max-width: 600px) {
+        #container {
+          grid-template-areas:
+            "n n ac"
+            "l l l"
+            "inside inside inside"
+            "outside outside outside"
+            "comfort comfort comfort" !important;
+        }
+      }
 
   - type: custom:button-card
     name: Open windows before starting the whole-house fan.
@@ -232,7 +346,7 @@ cards:
                 [[[
                   const mode = states['sensor.whole_house_fan_mode']?.state;
                   return mode === 'Idle'
-                    ? 'rgba(244, 67, 54, 0.18)'
+                    ? 'rgba(158, 158, 158, 0.16)'
                     : 'var(--ha-card-background)';
                 ]]]
           icon:
@@ -240,7 +354,7 @@ cards:
             - color: >
                 [[[
                   const mode = states['sensor.whole_house_fan_mode']?.state;
-                  return mode === 'Idle' ? 'var(--error-color)' : 'var(--primary-text-color)';
+                  return mode === 'Idle' ? 'var(--primary-text-color)' : 'var(--primary-text-color)';
                 ]]]
           name:
             - font-weight: 800
@@ -249,7 +363,7 @@ cards:
             - color: >
                 [[[
                   const mode = states['sensor.whole_house_fan_mode']?.state;
-                  return mode === 'Idle' ? 'var(--error-color)' : 'var(--primary-text-color)';
+                  return mode === 'Idle' ? 'var(--primary-text-color)' : 'var(--primary-text-color)';
                 ]]]
 
       - type: custom:button-card
@@ -374,7 +488,7 @@ cards:
       type: custom:bubble-card
       card_type: button
       button_type: name
-      name: Start Timer
+      name: Start Timed Run
       icon: mdi:timer-play-outline
       button_action:
         tap_action:
